@@ -2,8 +2,10 @@ package dev.extframework.tooling.api.extension
 
 import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
 
-// TODO make jackson parsing return a more readable yak wrapped error.
-// Represents the YakClient ERM (or Extension runtime model)
+// Represents the ERM (or Extension runtime model)
+
+public const val UNLOADABLE_ATTR_KEY: String = "unloadable"
+
 
 public data class ExtensionRuntimeModel(
     val apiVersion: Int,
@@ -14,16 +16,12 @@ public data class ExtensionRuntimeModel(
     val repositories: List<Map<String, String>> = ArrayList(),
     val parents: Set<ExtensionParent> = HashSet(),
 
-    public val partitions: Set<PartitionRuntimeModel>
+    public val partitions: Set<PartitionRuntimeModel>,
+
+    public val attributes: Map<String, String> = HashMap(),
 ) {
     public val namedPartitions: Map<String, PartitionRuntimeModel> = partitions.associateBy { it.name }
 }
-
-//public data class PartitionModelReference(
-//    val type: String,
-//    val name: String,
-//    val options: Map<String, String>
-//)
 
 public data class ExtensionParent(
     val group: String,
@@ -46,8 +44,6 @@ public data class ExtensionRepository(
 )
 
 public data class PartitionRuntimeModel(
-//    val apiVersion: Int,
-
     val type: String,
 
     val name: String,

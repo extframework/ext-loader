@@ -5,7 +5,7 @@ import dev.extframework.tooling.api.extension.partition.ExtensionPartitionContai
 
 public open class ExtensionClassLoader(
     name: String,
-    public val partitions: MutableList<ExtensionPartitionContainer<*, *>>,
+//    public val partitions: MutableList<ExtensionPartitionContainer<*, *>>,
     parent: ClassLoader,
 ) : IntegratedLoader(
     name = "Extension $name",

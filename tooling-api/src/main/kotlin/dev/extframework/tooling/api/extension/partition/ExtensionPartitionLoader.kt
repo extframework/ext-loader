@@ -25,10 +25,11 @@ public interface PartitionAccessTree : ArchiveAccessTree {
 public interface PartitionLoaderHelper {
     public val parentClassLoader: ClassLoader
     public val erm: ExtensionRuntimeModel
+    public val descriptor: PartitionDescriptor
 
     public fun metadataFor(
         partition: String
-    ) : Job<ExtensionPartitionMetadata>
+    ): Job<ExtensionPartitionMetadata>
 
     public operator fun get(name: String): CachedArchiveResource?
 }
@@ -42,23 +43,29 @@ public interface ExtensionPartitionMetadata {
 }
 
 public interface PartitionCacheHelper : CacheHelper<PartitionDescriptor> {
-//    public val parents: Map<ExtensionParent, ExtensionArtifactMetadata>
+    //    public val parents: Map<ExtensionParent, ExtensionArtifactMetadata>
     public val erm: ExtensionRuntimeModel
     public val prm: PartitionRuntimeModel
+    public val defaultEnvironment: String
 
 //    public fun newPartition(
 //        partition: PartitionRuntimeModel,
 //    ) : AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
 
     public fun cache(
-        partition: String
+        partition: String,
+        environment: String
     ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
 
     public fun cache(
         partition: String,
+        environment: String,
         parent: ExtensionParent,
-    ) : AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
+    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
 }
+
+//public val PartitionCacheHelper.currentEnvironment: String
+//    get() =
 
 public interface ExtensionPartitionLoader<T : ExtensionPartitionMetadata> {
     public val type: String
@@ -85,5 +92,5 @@ public interface ExtensionPartitionLoader<T : ExtensionPartitionMetadata> {
     public fun cache(
         artifact: Artifact<PartitionArtifactMetadata>,
         helper: PartitionCacheHelper
-    ) : AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
+    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
 }

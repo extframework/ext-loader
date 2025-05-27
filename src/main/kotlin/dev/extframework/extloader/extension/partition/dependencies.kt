@@ -1,14 +1,15 @@
 package dev.extframework.extloader.extension.partition
 
-import com.durganmcbroom.artifact.resolver.ArtifactException
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata
 import com.durganmcbroom.artifact.resolver.ArtifactRequest
-import com.durganmcbroom.artifact.resolver.IterableException
 import com.durganmcbroom.artifact.resolver.RepositorySettings
 import com.durganmcbroom.jobs.async.AsyncJob
 import com.durganmcbroom.jobs.async.asyncJob
 import com.durganmcbroom.jobs.async.mapAsync
-import dev.extframework.boot.archive.*
+import dev.extframework.boot.archive.ArchiveException
+import dev.extframework.boot.archive.ArchiveNodeResolver
+import dev.extframework.boot.archive.CacheHelper
+import dev.extframework.boot.archive.IArchive
 import dev.extframework.boot.dependency.DependencyResolver
 import dev.extframework.boot.dependency.DependencyResolverProvider
 import dev.extframework.boot.dependency.DependencyTypeContainer
@@ -83,6 +84,7 @@ internal fun cachePartitionDependencies(
                 .mapNotNull { it.exceptionOrNull() }
                 .filterIsInstance<ArchiveException.ArchiveNotFound>()
                 .first()
+
             throw PartitionLoadException(
                 partition.name,
                 "a dependency couldn't be located.",

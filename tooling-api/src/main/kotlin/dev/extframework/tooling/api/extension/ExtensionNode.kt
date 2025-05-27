@@ -14,5 +14,9 @@ public class ExtensionNode(
 
     public val runtimeModel: ExtensionRuntimeModel
 ) : ArchiveNode<ExtensionDescriptor> {
-    public val partitions: List<ExtensionPartitionContainer<*, *>> by classLoader::partitions
+//    public val partitions: List<ExtensionPartitionContainer<*, *>> by classLoader::partitions
+
+    override fun toString(): String {
+        return "Extension $descriptor"
+    }
 }

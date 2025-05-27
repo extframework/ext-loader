@@ -18,9 +18,11 @@ import dev.extframework.tooling.api.extension.PartitionRuntimeModel
 import dev.extframework.tooling.api.extension.descriptor
 import dev.extframework.tooling.api.extension.partition.*
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifactMetadata
-import dev.extframework.tooling.api.extension.partition.artifact.partitionNamed
+import dev.extframework.tooling.api.extension.partition.artifact.partition
 import dev.extframework.tooling.api.tweaker.EnvironmentTweaker
 import kotlinx.coroutines.awaitAll
+import java.nio.file.Path
+import kotlin.io.path.toPath
 
 public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionMetadata> {
     override val type: String = TYPE
@@ -56,37 +58,15 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
             "The tweaker partition must have a jar."
         )
 
-        val thisDescriptor = helper.erm.descriptor.partitionNamed(metadata.name)
-
-        //val result = environment.archiveGraph.cacheAsync(
-        //                            PartitionArtifactRequest(erm.descriptor.partitionNamed(reference.name)),
-        //                            repository,
-        //                            this@DefaultPartitionResolver
-        //                        )().merge()
-        //
-        //                        val resultValue = result.item.value
-        //
-        //                        if (resultValue is ArchiveData<*, *>) {
-        //                            val (prm2, erm2, archive2) = readData(resultValue as ArchiveData<*, CachedArchiveResource>)
-        //
-        //                            val loader2 = getLoader(prm2)
-        //
-        //                            parseMetadata(loader2, prm2, erm2, archive2)().merge()
-        //                        } else {
-        //                            resultValue as ExtensionPartitionContainer<*, *>
-        //
-        //                            resultValue.metadata
-        //                        }
-
         val cl = PartitionClassLoader(
-            thisDescriptor,
+            helper.descriptor,
             accessTree,
             reference,
             helper.parentClassLoader
         )
 
         val handle = PartitionArchiveHandle(
-            thisDescriptor.name,
+            helper.descriptor.name,
             cl,
             reference,
             setOf()
@@ -108,10 +88,11 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
         val node = TweakerPartitionNode(
             handle,
             accessTree,
-            instance
+            instance,
+            reference.location.toPath(),
         )
 
-        ExtensionPartitionContainer(thisDescriptor, metadata, node)
+        ExtensionPartitionContainer(helper.descriptor, metadata, node)
     }
 
     override fun cache(
@@ -120,7 +101,7 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
     ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> = asyncJob {
         val parents = helper.erm.parents
             .mapAsync {
-                val result = helper.cache("tweaker", it)()
+                val result = helper.cache("tweaker", helper.defaultEnvironment, it)()
 
                 val exception = result.exceptionOrNull()
 
@@ -150,4 +131,5 @@ public data class TweakerPartitionNode(
     override val archive: ArchiveHandle,
     override val access: PartitionAccessTree,
     val tweaker: EnvironmentTweaker,
+    val jarPath: Path
 ) : ExtensionPartition

@@ -3,6 +3,7 @@ package dev.extframework.tooling.api.extension.artifact
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata
 import com.durganmcbroom.artifact.resolver.ArtifactRequest
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenRepositorySettings
+import com.durganmcbroom.resources.Resource
 import dev.extframework.tooling.api.extension.ExtensionRuntimeModel
 
 public data class ExtensionDescriptor(
@@ -26,12 +27,14 @@ public data class ExtensionDescriptor(
 public data class ExtensionArtifactRequest(
     override val descriptor: ExtensionDescriptor
 ) : ArtifactRequest<ExtensionDescriptor>
+
 public typealias ExtensionRepositorySettings = SimpleMavenRepositorySettings
 public typealias ExtensionParentInfo = ArtifactMetadata.ParentInfo<ExtensionArtifactRequest, ExtensionRepositorySettings>
 
 public class ExtensionArtifactMetadata(
     desc: ExtensionDescriptor,
     parents: List<ExtensionParentInfo>,
-    public val erm: ExtensionRuntimeModel,
+    public val erm: Resource,
+//    public val erm: ExtensionRuntimeModel,
     public val repository: ExtensionRepositorySettings
 ) : ArtifactMetadata<ExtensionDescriptor, ExtensionParentInfo>(desc, parents)

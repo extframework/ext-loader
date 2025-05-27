@@ -2,67 +2,94 @@
 
 package dev.extframework.tooling.api.environment
 
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
+//public fun interface EnvironmentAttributeUpdater<T : ExtensionEnvironment.Attribute> : (T) -> T
 
-public fun interface EnvironmentAttributeUpdater<T : EnvironmentAttribute> : (T) -> T
+// TODO redo environment composition: the issue is that mutable attributes,
+//   such as the partition loaders attr, can be mutated in the root environment
+//   either way.
+public interface ExtensionEnvironment {
+    public val parent: ExtensionEnvironment?
+    public val name: String
 
-public open class ExtensionEnvironment {
-    private val attributes: MutableMap<EnvironmentAttributeKey<*>, EnvironmentAttribute> = ConcurrentHashMap()
-    private val updates: MutableMap<EnvironmentAttributeKey<*>, ConcurrentLinkedQueue<EnvironmentAttributeUpdater<*>>> =
-        ConcurrentHashMap()
 
-    public operator fun <T : EnvironmentAttribute> get(key: EnvironmentAttributeKey<T>): DeferredValue<T> {
-        return defer(key.toString()) {
-            val initial = attributes[key] as? T ?: return@defer null
-
-            val updated = (updates[key] ?: listOf()).fold(initial) { acc, it ->
-                (it as EnvironmentAttributeUpdater<T>).invoke(acc)
-            }
-            attributes[key] = updated
-            updates[key]?.clear()
-
-            updated
-        }
+    public operator fun <T : Attribute> get(key: Attribute.Key<T>): T {
+        return find(key) ?: throw MissingEnvironmentKeyException(
+            key.toString()
+        )
     }
 
-    // Performs a lazily evaluated update on the given key, the update only happens once.
-    public fun <T : EnvironmentAttribute> update(
-        key: EnvironmentAttributeKey<T>,
-        updater: EnvironmentAttributeUpdater<T>
-    ) {
-        (updates[key] ?: ConcurrentLinkedQueue<EnvironmentAttributeUpdater<*>>().also { updates.put(key, it) }).apply {
-            add(updater)
-        }
-    }
+    public fun <T : Attribute> find(key: Attribute.Key<T>): T?
 
-    public fun <T : EnvironmentAttribute> set(attribute: T) {
-        attributes[attribute.key] = attribute
-    }
+//    {
+//        val initial = attributes[key] as? T ?: return null
+//
+//        val updated = (updates[key] ?: listOf()).fold(initial) { acc, it ->
+//            (it as EnvironmentAttributeUpdater<T>).invoke(acc)
+//        }
+//        attributes[key] = updated
+//        updates[key]?.clear()
+//
+//        return updated
+//    }
 
-    public fun <T : EnvironmentAttribute> setUnless(attribute: T) {
-        if (!attributes.containsKey(attribute.key)) {
-            set(attribute)
-        }
-    }
+//    // Performs a lazily evaluated update on the given key, the update only happens once.
+//    public fun <T : EnvironmentAttribute> update(
+//        key: EnvironmentAttributeKey<T>,
+//        updater: EnvironmentAttributeUpdater<T>
+//    ) {
+//        (updates[key] ?: ConcurrentLinkedQueue<EnvironmentAttributeUpdater<*>>().also { updates.put(key, it) }).apply {
+//            add(updater)
+//        }
+//    }
 
-    public operator fun <T : EnvironmentAttribute> plusAssign(attribute: T) {
+    public fun <T : Attribute> set(attribute: T)
+
+    public operator fun plusAssign(attribute: Attribute) {
         set(attribute)
     }
 
-    public operator fun plusAssign(other: ExtensionEnvironment) {
-        other.attributes.forEach { (_, attribute) ->
-            updates[attribute.key]?.forEach {
-                (it as EnvironmentAttributeUpdater<EnvironmentAttribute>)(attribute)
-            }
-        }
+//    {
+//        attributes[attribute.key] = attribute
+//    }
 
-        attributes.putAll(other.attributes)
+    public fun contains(key: Attribute.Key<*>): Boolean
+
+
+//    public fun <T : EnvironmentAttribute> setUnless(attribute: T)
+
+//    {
+//        if (!attributes.containsKey(attribute.key)) {
+//            set(attribute)
+//        }
+//    }
+
+//    public operator fun <T : EnvironmentAttribute> plusAssign(attribute: T) {
+//        set(attribute)
+//    }
+
+//    public operator fun plusAssign(other: ExtensionEnvironment) {
+//        other.attributes.forEach { (_, attribute) ->
+//            updates[attribute.key]?.forEach {
+//                (it as EnvironmentAttributeUpdater<EnvironmentAttribute>)(attribute)
+//            }
+//        }
+//
+//        attributes.putAll(other.attributes)
+//    }
+
+    public fun remove(key: Attribute.Key<*>)
+//    {
+//        updates.remove(key)
+//        attributes.remove(key)
+//    }
+
+    public fun compose(name: String) : ExtensionEnvironment
+
+    public interface Attribute {
+        public val key: Key<*>
+
+        public interface Key<T : Attribute>
+
     }
 }
 
-public interface EnvironmentAttribute {
-    public val key: EnvironmentAttributeKey<*>
-}
-
-public interface EnvironmentAttributeKey<T : EnvironmentAttribute>

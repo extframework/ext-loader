@@ -1,5 +1,6 @@
 package dev.extframework.extloader.uber
 
+import dev.extframework.tooling.api.uber.UberDescriptor
 import kotlin.test.Test
 
 class RandomTest {

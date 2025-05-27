@@ -7,6 +7,7 @@ import com.durganmcbroom.artifact.resolver.simple.maven.layout.ResourceRetrieval
 import com.durganmcbroom.jobs.JobName
 import com.durganmcbroom.jobs.async.AsyncJob
 import com.durganmcbroom.jobs.async.asyncJob
+import com.durganmcbroom.resources.ResourceAlgorithm
 import com.durganmcbroom.resources.ResourceNotFoundException
 import com.durganmcbroom.resources.toByteArray
 import com.fasterxml.jackson.databind.JsonNode
@@ -22,11 +23,11 @@ import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactMetadata
 import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactRequest
 import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
 import dev.extframework.tooling.api.extension.artifact.ExtensionParentInfo
+import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
 import dev.extframework.tooling.api.extension.descriptor
 
 public open class ExtensionArtifactRepository(
     final override val settings: SimpleMavenRepositorySettings,
-    private val providers: DependencyTypeContainer,
     override val factory: ExtensionRepositoryFactory,
 ) : ArtifactRepository<SimpleMavenRepositorySettings, ExtensionArtifactRequest, ExtensionArtifactMetadata> {
     override val name: String = "extensions@${settings.layout.name}"
@@ -36,25 +37,23 @@ public open class ExtensionArtifactRepository(
     override fun get(
         request: ExtensionArtifactRequest
     ): AsyncJob<ExtensionArtifactMetadata> = asyncJob(JobName("Load extension metadata for: '${request.descriptor}'")) {
-        val simpleMaven = providers.get("simple-maven")
-            ?: throw IllegalStateException("SimpleMaven not found in dependency providers!")
-
         val (group, artifact, version) = request.descriptor
 
         val (ermOr, ermLocation) = try {
             val resource = layout.resourceOf(group, artifact, version, "erm", "json")
 
-            resource.open().toByteArray() to resource.location
+            resource to resource.location
         } catch (e: ResourceNotFoundException) {
             throw MetadataRequestException.MetadataNotFound(request.descriptor, "erm.json", e)
         } catch (e: Exception) {
             throw MetadataRequestException("Failed to request resource for erm: '${request.descriptor}'", e)
         }
 
-        verifyVersion(request.descriptor.name, mapper.readTree(ermOr))
+        val ermBytes = ermOr.open().toByteArray()
+        verifyVersion(request.descriptor.name, mapper.readTree(ermBytes))
 
         val erm = try {
-            mapper.readValue<ExtensionRuntimeModel>(ermOr)
+            mapper.readValue<ExtensionRuntimeModel>(ermBytes)
         } catch (e: Exception) {
             throw StructuredException(
                 ExtLoaderExceptions.InvalidErm,
@@ -75,12 +74,12 @@ public open class ExtensionArtifactRepository(
                 ExtensionParentInfo(
                     ExtensionArtifactRequest(req1.toDescriptor()),
                     erm.repositories.map { settings ->
-                        (simpleMaven.parseSettings(settings) as? SimpleMavenRepositorySettings)
-                            ?: throw ResourceRetrievalException.IllegalState("Unknown repository declaration: '$settings' in extension runtime model: '${request.descriptor}' at '${ermLocation}'. Cannot parse.")
+                        parseSettings(settings)
+                            ?: throw ResourceRetrievalException.IllegalState("Illegal repository declaration: '$settings' in extension runtime model: '${request.descriptor}' at '${ermLocation}'. Cannot parse.")
                     },
                 )
             },
-            erm,
+            ermOr,
             settings
         )
     }
@@ -89,9 +88,9 @@ public open class ExtensionArtifactRepository(
         extension: String,
         node: JsonNode,
     ) {
-        val apiVersion =  node.get("apiVersion")?.asInt() ?: 0
+        val apiVersion = node.get("apiVersion")?.asInt() ?: 0
 
-        if (apiVersion != TOOLING_API_VERSION) {
+        if (!(2..TOOLING_API_VERSION).contains(apiVersion)) {
             throw MetadataRequestException("Extension: '$extension' is not compatible with this Tooling API version")
         }
     }
@@ -115,6 +114,28 @@ public open class ExtensionArtifactRepository(
             ) {
                 erm.apiVersion asContext "Extension API version"
                 TOOLING_API_VERSION asContext "Current API version"
+            }
+        }
+    }
+
+    internal companion object {
+        fun parseSettings(settings: Map<String, String>): ExtensionRepositorySettings? {
+            val location = settings["location"] ?: return null
+            val preferredHash = settings["preferredHash"] ?: "SHA1"
+            val type = settings["type"] ?: "default"
+
+            val hashType = ResourceAlgorithm.valueOf(preferredHash)
+
+            return when (type) {
+                "default" -> SimpleMavenRepositorySettings.default(
+                    location,
+                    true,
+                    false,
+                    hashType
+                )
+
+                "local" -> SimpleMavenRepositorySettings.local(location, hashType)
+                else -> return null
             }
         }
     }

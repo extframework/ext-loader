@@ -1,4 +1,4 @@
-package dev.extframework.extloader.uber
+package dev.extframework.tooling.api.uber
 
 import com.durganmcbroom.artifact.resolver.Artifact
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata
@@ -15,6 +15,7 @@ import com.durganmcbroom.jobs.result
 import dev.extframework.boot.archive.ArchiveAccessTree
 import dev.extframework.boot.archive.ArchiveData
 import dev.extframework.boot.archive.ArchiveNodeResolver
+import dev.extframework.boot.archive.ArchiveRelationship
 import dev.extframework.boot.archive.ArchiveTrace
 import dev.extframework.boot.archive.CacheHelper
 import dev.extframework.boot.archive.CachedArchiveResource
@@ -36,12 +37,17 @@ public object UberResolver : ArchiveNodeResolver<
         UberArtifactRequest,
         UberNode,
         UberRepositorySettings,
-        UberArtifactMetadata,
-        > {
-    override val context: ResolutionContext<UberRepositorySettings, UberArtifactRequest, UberArtifactMetadata> = UberRepositoryFactory.createContext()
+        UberArtifactMetadata> {
+    override val context: ResolutionContext<UberRepositorySettings, UberArtifactRequest, UberArtifactMetadata> =
+        UberRepositoryFactory.createContext()
     override val metadataType: Class<UberArtifactMetadata> = UberArtifactMetadata::class.java
     override val name: String = "uber-loader"
     override val nodeType: Class<in UberNode> = UberNode::class.java
+    override val apiVersion: Int = 1
+
+    // TODO this is somewhat hacky
+    public val by: MutableMap<ArtifactMetadata.Descriptor, UberDescriptor> =
+        HashMap<ArtifactMetadata.Descriptor, UberDescriptor>()
 
     override fun deserializeDescriptor(
         descriptor: Map<String, String>,
@@ -69,6 +75,14 @@ public object UberResolver : ArchiveNodeResolver<
         accessTree: ArchiveAccessTree,
         helper: ResolutionHelper
     ): Job<UberNode> = job {
+        accessTree
+            .targets
+            .filter { it.relationship is ArchiveRelationship.Direct }
+            .map { it.relationship.node.descriptor }
+            .forEach { desc ->
+                by[desc] = data.descriptor
+            }
+
         UberNode(accessTree, data.descriptor)
     }
 
@@ -85,6 +99,10 @@ public object UberResolver : ArchiveNodeResolver<
             req.repository,
             req.resolver
         )
+
+        artifact.metadata.requestedParents.forEach {
+            by[it.request.descriptor] = artifact.metadata.descriptor
+        }
 
         val parents = artifact.metadata.requestedParents.mapAsync {
             cacheReq(

@@ -32,6 +32,10 @@ public class StructuredException (
         this.context = context
         this.solutions = solutions
     }
+
+    public inner class Formatted(
+        override val message: String,
+    ) : Exception()
 }
 
 public interface ExceptionConfiguration {

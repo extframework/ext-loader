@@ -6,11 +6,9 @@ import dev.extframework.gradle.common.extFramework
 import dev.extframework.gradle.common.objectContainer
 
 group = "dev.extframework"
-
-version = "1.0.7-SNAPSHOT"
+version = "1.0.8-SNAPSHOT"
 
 dependencies {
-    boot()
     objectContainer()
     jobs()
     artifactResolver()
@@ -18,6 +16,8 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation(project(":"))
+
 }
 
 tasks.test {

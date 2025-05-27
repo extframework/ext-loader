@@ -4,8 +4,6 @@ import com.durganmcbroom.jobs.result
 import dev.extframework.boot.archive.ArchiveNodeResolver
 import dev.extframework.boot.archive.ArchiveTrace
 import dev.extframework.boot.util.requireKeyInDescriptor
-import dev.extframework.tooling.api.environment.EnvironmentAttribute
-import dev.extframework.tooling.api.environment.EnvironmentAttributeKey
 import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactMetadata
 import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactRequest
 import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
@@ -20,20 +18,16 @@ public interface ExtensionResolver : ArchiveNodeResolver<
         ExtensionArtifactRequest,
         ExtensionNode,
         ExtensionRepositorySettings,
-        ExtensionArtifactMetadata>, EnvironmentAttribute {
+        ExtensionArtifactMetadata> {
     public val partitionResolver : PartitionResolver
 
     override val name: String
         get() = "extension"
-    override val key: EnvironmentAttributeKey<*>
-        get() = ExtensionResolver
 
     override val metadataType: Class<ExtensionArtifactMetadata>
         get() = ExtensionArtifactMetadata::class.java
     override val nodeType: Class<ExtensionNode>
         get() = ExtensionNode::class.java
-
-    public companion object : EnvironmentAttributeKey<ExtensionResolver>
 
     public val accessBridge: AccessBridge
 

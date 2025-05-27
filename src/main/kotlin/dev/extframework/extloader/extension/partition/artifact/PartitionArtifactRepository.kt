@@ -32,7 +32,7 @@ public open class PartitionArtifactRepository(
             throw MetadataRequestException.MetadataNotFound(request.descriptor, "prm/erm.json")
         }
 
-        val resource = try {
+        val jar = try {
             layout.resourceOf(
                 group,
                 artifact,
@@ -40,7 +40,7 @@ public open class PartitionArtifactRepository(
                 partition,
                 "jar",
             )
-        } catch (e: ResourceNotFoundException) {
+        } catch (_: ResourceNotFoundException) {
             null
         } catch (e: Throwable) {
             throw e
@@ -48,8 +48,7 @@ public open class PartitionArtifactRepository(
 
         PartitionArtifactMetadata(
             request.descriptor,
-            resource,
-            prm
+            jar,
         )
     }
 }

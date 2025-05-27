@@ -3,6 +3,7 @@ package dev.extframework.extloader.exception
 import dev.extframework.tooling.api.exception.ExceptionContextSerializer
 import dev.extframework.tooling.api.exception.StackTracePrinter
 import dev.extframework.tooling.api.exception.StructuredException
+import java.awt.BasicStroke
 import java.io.OutputStream
 import java.io.PrintWriter
 import java.lang.StringBuilder
@@ -53,10 +54,19 @@ internal fun hierarchicalDistance(type: Class<*>, parent: Class<*>): Hierarchica
 }
 
 internal fun handleException(
-    serializers: List<ExceptionContextSerializer<*>>,
-    stackTracePrinter: StackTracePrinter,
+//    serializers: List<ExceptionContextSerializer<*>>,
+//    stackTracePrinter: StackTracePrinter,
     exception: StructuredException
-) {
+) : String {
+    val serializers = buildList {
+        AnyContextSerializer().also(::add)
+        IterableContextSerializer().also(::add)
+        MapContextSerializer().also(::add)
+        StringContextSerializer().also(::add)
+        PathContextSerializer().also(::add)
+    }
+    val stackTracePrinter = BasicExceptionPrinter()
+
     fun serializeInternal(value: Any): String {
         // Super class distance is calculated as 1 + the max height of interfaces implemented by the current class
 
@@ -120,5 +130,5 @@ internal fun handleException(
     stackTracePrinter.printStacktrace(exception, printWriter)
     printWriter.flush()
 
-    System.err.println(output.toString())
+    return output.toString()
 }

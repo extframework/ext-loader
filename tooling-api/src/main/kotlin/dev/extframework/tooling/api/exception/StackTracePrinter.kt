@@ -1,13 +1,12 @@
 package dev.extframework.tooling.api.exception
 
-import dev.extframework.tooling.api.environment.EnvironmentAttribute
-import dev.extframework.tooling.api.environment.EnvironmentAttributeKey
+import dev.extframework.tooling.api.environment.ExtensionEnvironment
 import java.io.PrintWriter
 
-public interface StackTracePrinter : EnvironmentAttribute {
-    override val key: EnvironmentAttributeKey<*>
+public interface StackTracePrinter : ExtensionEnvironment.Attribute {
+    override val key: ExtensionEnvironment.Attribute.Key<*>
         get() = StackTracePrinter
     public fun printStacktrace(throwable: Throwable, printer: PrintWriter)
 
-    public companion object : EnvironmentAttributeKey<StackTracePrinter>
+    public companion object : ExtensionEnvironment.Attribute.Key<StackTracePrinter>
 }

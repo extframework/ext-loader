@@ -1,0 +1,19 @@
+{
+  "apiVersion": 2,
+  "groupId": "dev.extframework.test",
+  "name": "blackbox",
+  "version": "1.0",
+  "repositories": [],
+  "parents": [],
+  "partitions": [
+    {
+      "type": "tweaker",
+      "name": "tweaker",
+      "repositories": [],
+      "dependencies": [],
+      "options": {
+        "tweaker-class": "dev.extframework.test.blackbox.BlackboxTweaker"
+      }
+    }
+  ]
+}

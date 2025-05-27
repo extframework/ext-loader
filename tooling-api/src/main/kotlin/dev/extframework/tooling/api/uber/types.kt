@@ -1,4 +1,4 @@
-package dev.extframework.extloader.uber
+package dev.extframework.tooling.api.uber
 
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata.Descriptor
@@ -13,14 +13,30 @@ import dev.extframework.boot.archive.ArchiveNode
 import dev.extframework.boot.archive.ArchiveNodeResolver
 import kotlin.random.Random
 
-public data class UberDescriptor(
+public class UberDescriptor(
     override val name: String,
 ) : Descriptor {
     // TODO this is not a good solution
-    val randomId: String = randomId()
+    public val randomId: String = randomId()
 
     override fun toString(): String {
         return name
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is UberDescriptor) return false
+
+        if (name != other.name) return false
+        if (randomId != other.randomId) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = name.hashCode()
+        result = 31 * result + randomId.hashCode()
+        return result
     }
 
     internal companion object {
@@ -34,6 +50,8 @@ public data class UberDescriptor(
             }
         }
     }
+
+
 }
 
 public data class UberParentRequest<D : Descriptor, T : ArtifactRequest<D>, S : RepositorySettings>(

@@ -6,12 +6,10 @@ import dev.extframework.boot.dependency.DependencyTypeContainer
 import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
 
 public class ExtensionRepositoryFactory(
-    private val dependencyProviders: DependencyTypeContainer
 ) : RepositoryFactory<ExtensionRepositorySettings, ExtensionArtifactRepository> {
     override fun createNew(settings: SimpleMavenRepositorySettings): ExtensionArtifactRepository {
         return ExtensionArtifactRepository(
             settings,
-            dependencyProviders,
             this
         )
     }

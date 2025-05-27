@@ -5,6 +5,7 @@ import dev.extframework.boot.archive.ArchiveNodeResolver
 import dev.extframework.boot.archive.ArchiveTrace
 import dev.extframework.boot.util.requireKeyInDescriptor
 import dev.extframework.boot.util.typeOf
+import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
 import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifactMetadata
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifactRequest
@@ -17,21 +18,34 @@ public interface PartitionResolver : ArchiveNodeResolver<
         PartitionDescriptor, PartitionArtifactRequest, ExtensionPartitionContainer<*, *>, ExtensionRepositorySettings, PartitionArtifactMetadata> {
     override val metadataType: Class<PartitionArtifactMetadata>
         get() = PartitionArtifactMetadata::class.java
-    override val name: String
-        get() = "extension-partition"
     override val nodeType: Class<in ExtensionPartitionContainer<*, *>>
         get() = typeOf()
+    override val apiVersion: Int
+        get() = 1
 
     override fun deserializeDescriptor(
         descriptor: Map<String, String>,
         trace: ArchiveTrace
     ): Result<PartitionDescriptor> = result {
-        val desc = descriptor.requireKeyInDescriptor("descriptor") { trace }
-        PartitionDescriptor.parseDescriptor(desc)
+        PartitionDescriptor(
+            ExtensionDescriptor(
+                descriptor.requireKeyInDescriptor("group") { trace },
+                descriptor.requireKeyInDescriptor("artifact") { trace },
+                descriptor.requireKeyInDescriptor("version") { trace },
+            ),
+            descriptor.requireKeyInDescriptor("partition") { trace },
+            descriptor.requireKeyInDescriptor("environment") { trace }
+        )
     }
 
     override fun serializeDescriptor(descriptor: PartitionDescriptor): Map<String, String> {
-        return mapOf("descriptor" to descriptor.name)
+        return mapOf(
+            "group" to descriptor.extension.group,
+            "artifact" to descriptor.extension.artifact,
+            "version" to descriptor.extension.version,
+            "partition" to descriptor.partition,
+            "environment" to descriptor.environment,
+        )
     }
 
     override fun pathForDescriptor(descriptor: PartitionDescriptor, classifier: String, type: String): Path {

@@ -4,15 +4,16 @@ import com.durganmcbroom.artifact.resolver.Artifact
 import com.durganmcbroom.artifact.resolver.ResolutionContext
 import com.durganmcbroom.artifact.resolver.createContext
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenDescriptor
-import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenRepositorySettings
 import com.durganmcbroom.artifact.resolver.simple.maven.layout.SimpleMavenDefaultLayout
 import com.durganmcbroom.jobs.Job
+import com.durganmcbroom.jobs.JobScope
 import com.durganmcbroom.jobs.async.AsyncJob
 import com.durganmcbroom.jobs.async.asyncJob
 import com.durganmcbroom.jobs.async.mapAsync
 import com.durganmcbroom.jobs.job
 import com.durganmcbroom.jobs.mapException
 import com.durganmcbroom.resources.Resource
+import com.durganmcbroom.resources.toByteArray
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
@@ -22,12 +23,11 @@ import dev.extframework.boot.constraint.registerConstraintNegotiator
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
 import dev.extframework.boot.util.basicObjectMapper
+import dev.extframework.extloader.extension.artifact.ExtensionArtifactRepository.Companion.parseSettings
 import dev.extframework.extloader.extension.artifact.ExtensionRepositoryFactory
 import dev.extframework.extloader.extension.partition.DefaultPartitionResolver
 import dev.extframework.tooling.api.TOOLING_API_VERSION
-import dev.extframework.tooling.api.environment.ExtensionEnvironment
-import dev.extframework.tooling.api.environment.dependencyTypesAttrKey
-import dev.extframework.tooling.api.environment.extract
+import dev.extframework.tooling.api.environment.EnvironmentRegistry
 import dev.extframework.tooling.api.extension.ExtensionClassLoader
 import dev.extframework.tooling.api.extension.ExtensionNode
 import dev.extframework.tooling.api.extension.ExtensionResolver
@@ -36,36 +36,30 @@ import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactMetadata
 import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactRequest
 import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
 import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
+import dev.extframework.tooling.api.extension.partition.PartitionResolver
 import kotlinx.coroutines.awaitAll
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 
 public open class DefaultExtensionResolver(
     parent: ClassLoader,
-    private val environment: ExtensionEnvironment,
+    environmentRegistry: EnvironmentRegistry,
+    defaultEnvironment: String
 ) : ExtensionResolver, RegisterAuditor {
     private val layerLoader = ExtensionLayerClassLoader(parent)
-    protected val factory: ExtensionRepositoryFactory = ExtensionRepositoryFactory(
-        environment[dependencyTypesAttrKey].extract().container
-    )
+    protected val factory: ExtensionRepositoryFactory = ExtensionRepositoryFactory()
 
     private val mapper = ObjectMapper().registerModule(KotlinModule.Builder().build())
 
-    internal data class ExtensionLoadMetadata(
-//        val erm: ExtensionRuntimeModel,
-//        val repository: ExtensionRepositorySettings,
-        val classloader: ExtensionClassLoader
-    )
-
-    internal data class ExtensionCacheMetadata(
+    private data class ExtensionMetadata(
         val erm: ExtensionRuntimeModel,
         val repository: ExtensionRepositorySettings,
     )
 
-
-    internal val cachedExtensions : MutableMap<ExtensionDescriptor, ExtensionCacheMetadata> = HashMap()
-
-    internal val loadedExtensions: MutableMap<ExtensionDescriptor, ExtensionLoadMetadata> = HashMap()
+    // TODO determine if it is necessary for these keys to be strings instead of ExtensionDescriptors
+    //   (and then additionally match on version)
+    private val extensionMetadata: MutableMap<String, ExtensionMetadata> = HashMap()
+    private val extensionClassloaders: MutableMap<String, ExtensionClassLoader> = HashMap()
 
     override val apiVersion: Int = TOOLING_API_VERSION
     override val context: ResolutionContext<ExtensionRepositorySettings, ExtensionArtifactRequest, ExtensionArtifactMetadata>
@@ -82,21 +76,19 @@ public open class DefaultExtensionResolver(
         }
 
         override fun classLoaderFor(descriptor: ExtensionDescriptor): ExtensionClassLoader {
-            return loadedExtensions[descriptor]?.classloader ?: extensionNotPresent(descriptor)
+            return (extensionClassloaders[descriptor.toIdentifier()]) ?: extensionNotPresent(descriptor)
         }
 
         override fun ermFor(descriptor: ExtensionDescriptor): ExtensionRuntimeModel {
-            return cachedExtensions[descriptor]?.erm ?: extensionNotPresent(descriptor)
+            return extensionMetadata[descriptor.toIdentifier()]?.erm ?: extensionNotPresent(descriptor)
         }
 
         override fun repositoryFor(descriptor: ExtensionDescriptor): ExtensionRepositorySettings {
-            return cachedExtensions[descriptor]?.repository ?: extensionNotPresent(descriptor)
+            return extensionMetadata[descriptor.toIdentifier()]?.repository ?: extensionNotPresent(descriptor)
         }
     }
-
-    override val partitionResolver: DefaultPartitionResolver = DefaultPartitionResolver(
-        environment,
-        accessBridge
+    override val partitionResolver: PartitionResolver = DefaultPartitionResolver(
+        accessBridge, environmentRegistry, defaultEnvironment
     )
 
     override fun register(auditors: Auditors): Auditors {
@@ -127,24 +119,18 @@ public open class DefaultExtensionResolver(
             .inputStream()
             .let { basicObjectMapper.readValue<Map<String, String>>(it) }
 
-        val repository = environment[dependencyTypesAttrKey]
-            .extract()
-            .container
-            .get("simple-maven")!!
-            .parseSettings(rawRepository) as ExtensionRepositorySettings
+        val repository = parseSettings(rawRepository) as ExtensionRepositorySettings
 
-        loadedExtensions[data.descriptor] = ExtensionLoadMetadata(
-            ExtensionClassLoader(
-                data.descriptor.name,
-                ArrayList(),
-                layerLoader,
-            )
+        val cl = ExtensionClassLoader(
+            data.descriptor.name,
+            layerLoader
         )
 
-        cachedExtensions[data.descriptor] = ExtensionCacheMetadata(
+        extensionMetadata[data.descriptor.toIdentifier()] = ExtensionMetadata(
             erm,
             repository,
         )
+        extensionClassloaders[data.descriptor.toIdentifier()] = cl
 
         val parents = accessTree.targets
             .map(ArchiveTarget::relationship)
@@ -156,7 +142,7 @@ public open class DefaultExtensionResolver(
             data.descriptor,
             accessTree,
             parents,
-            loadedExtensions[data.descriptor]!!.classloader,
+            cl,
             erm
         )
     }
@@ -167,40 +153,16 @@ public open class DefaultExtensionResolver(
     ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> = asyncJob {
         helper.withResource(
             "erm.json",
-            Resource("<heap>") {
-                runCatching {
-                    ByteArrayInputStream(mapper.writeValueAsBytes(artifact.metadata.erm))
-                }.mapException {
-                    ExtensionLoadException(artifact.metadata.descriptor, it) {}
-                }.getOrThrow()
-            }
+            artifact.metadata.erm,
         )
 
         helper.withResource(
             "repository.json",
-            Resource("<heap>") {
-                val repository = artifact.metadata.repository
-
-                runCatching {
-                    ByteArrayInputStream(
-                        basicObjectMapper.writeValueAsBytes(
-                            mapOf(
-                                "location" to repository.layout.location,
-                                "preferredHash" to repository.preferredHash.name,
-                                "type" to if (repository.layout is SimpleMavenDefaultLayout) "default" else "local"
-                            )
-                        )
-                    )
-                }.mapException {
-                    ExtensionLoadException(artifact.metadata.descriptor, it) {
-                        artifact.metadata.descriptor asContext "Extension name"
-                    }
-                }.merge()
-            }
+            writeRepositoryToResource(artifact.metadata)
         )
 
-        cachedExtensions[artifact.metadata.descriptor] = ExtensionCacheMetadata(
-            artifact.metadata.erm,
+        extensionMetadata[artifact.metadata.descriptor.toIdentifier()] = ExtensionMetadata(
+            mapper.readValue<ExtensionRuntimeModel>(artifact.metadata.erm.open().toByteArray()),
             artifact.metadata.repository,
         )
 
@@ -211,29 +173,35 @@ public open class DefaultExtensionResolver(
             )().merge()
         }
 
-//        val repositorySettings = artifact.metadata.repository
-//        val partitions = artifact.metadata.erm.partitions.mapAsync {
-//            helper.cache(
-//                PartitionArtifactRequest(
-//                    PartitionDescriptor(
-//                        artifact.metadata.descriptor,
-//                        it.name
-//                    )
-//                ),
-//                repositorySettings,
-//                this@DefaultExtensionResolver.partitionResolver
-//            )().merge()
-//        }
-
         helper.newData(
             artifact.metadata.descriptor,
-
-            (parents
-//                    + partitions
-                    )
+            parents
                 .onEach { it.start() }
                 .awaitAll()
         )
     }
 
+    private fun JobScope.writeRepositoryToResource(metadata: ExtensionArtifactMetadata): Resource = Resource("<heap>") {
+        val repository = metadata.repository
+
+        runCatching {
+            ByteArrayInputStream(
+                basicObjectMapper.writeValueAsBytes(
+                    mapOf(
+                        "location" to repository.layout.location,
+                        "preferredHash" to repository.preferredHash.name,
+                        "type" to if (repository.layout is SimpleMavenDefaultLayout) "default" else "local"
+                    )
+                )
+            )
+        }.mapException {
+            ExtensionLoadException(metadata.descriptor, it) {
+                metadata.descriptor asContext "Extension name"
+            }
+        }.merge()
+    }
+
+    private fun ExtensionDescriptor.toIdentifier(): String {
+        return "$group:$artifact"
+    }
 }
