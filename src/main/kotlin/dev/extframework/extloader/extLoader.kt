@@ -1,8 +1,6 @@
 package dev.extframework.extloader
 
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
 import com.fasterxml.jackson.module.kotlin.readValue
 import dev.extframework.boot.archive.*
 import dev.extframework.boot.monad.Tree
@@ -40,281 +38,273 @@ public open class DefaultExtensionLoader(
         rootEnvironment += this
     }
 
-    override fun cache(
+    override suspend fun cache(
         requests: Map<ExtensionDescriptor, ExtensionRepositorySettings>,
-    ): AsyncJob<List<Tree<ExtensionLoader.ExtensionData>>> = asyncJob {
-        runCatching {
-            val uber = UberDescriptor("All Extensions")
+    ): List<Tree<ExtensionLoader.ExtensionData>> {
+        val uber = UberDescriptor("All Extensions")
 
-            val uberExtensionRequest = UberArtifactRequest(
-                uber,
-                (requests
-                    .filterNot { loaded.any { n -> n.descriptor == it.key } }
-                    .map {
-                        UberParentRequest(
-                            ExtensionArtifactRequest(it.key), it.value, extensionResolver
-                        )
-                    } + loaded.map {
+        val uberExtensionRequest = UberArtifactRequest(
+            uber,
+            (requests
+                .filterNot { loaded.any { n -> n.descriptor == it.key } }
+                .map {
                     UberParentRequest(
-                        ExtensionArtifactRequest(
-                            it.descriptor
-                        ),
-                        extensionResolver.accessBridge.repositoryFor(it.descriptor),
-                        extensionResolver
+                        ExtensionArtifactRequest(it.key), it.value, extensionResolver
                     )
-                }).filterDuplicates()
-            )
+                } + loaded.map {
+                UberParentRequest(
+                    ExtensionArtifactRequest(
+                        it.descriptor
+                    ),
+                    extensionResolver.accessBridge.repositoryFor(it.descriptor),
+                    extensionResolver
+                )
+            }).filterDuplicates()
+        )
 
-            val result = graph.cacheAsync(
+        val result = try {
+            graph.cache(
                 uberExtensionRequest,
                 UberRepositorySettings,
                 UberResolver
-            )().merge()
+            )
+        } catch (e: ArchiveException.ArchiveNotFound) {
+            throw StructuredException(
+                ExtLoaderExceptions.ExtensionNotFound,
+                e,
+                "Failed to find extension: '${e.archive}'"
+            ) {
+                e.lookedIn asContext "Repositories Searched"
+                solution("Make sure the descriptor is typed correctly and the repository is defined correctly.")
+            }
+        } catch (e: Throwable) {
+            throw StructuredException(
+                ExtLoaderExceptions.ExtensionCacheException,
+                e,
+                "An unexpected error occurred when attempting to cache."
+            ) {
+                solution("Check your environment and continue.")
+                requests asContext "Extension requests"
+            }
+        }
 
-            result.parents.map {
-                it.map {
-                    val value = it.value
+        return result.parents.map {
+            it.map { t ->
+                val value = t.value
 
-                    ExtensionLoader.ExtensionData(
-                        value.descriptor as ExtensionDescriptor,
-                        when (value) {
-                            is ArchiveData<*, *> -> {
-                                val resource = value.resources["erm.json"]!! as CachedArchiveResource
-                                resource.path.let {
-                                    basicObjectMapper.readValue<ExtensionRuntimeModel>(
-                                        Files.readAllBytes(it)
-                                    )
-                                }
+                ExtensionLoader.ExtensionData(
+                    value.descriptor as ExtensionDescriptor,
+                    when (value) {
+                        is ArchiveData<*, *> -> {
+                            val resource = value.resources["erm.json"]!! as CachedArchiveResource
+                            resource.path.let {
+                                basicObjectMapper.readValue<ExtensionRuntimeModel>(
+                                    Files.readAllBytes(it)
+                                )
                             }
-
-                            is ExtensionNode -> {
-                                value.runtimeModel
-                            }
-
-                            else -> throw Exception("This should not happen")
                         }
-                    )
-                }
-            }
-        }.handleStructuredException()
-    }
 
-    override fun load(
-        extensions: List<ExtensionDescriptor>
-    ): AsyncJob<List<ExtensionNode>> = asyncJob {
-        runCatching {
-            val possibleSupers = extensions
-                .filterNot { d -> loaded.any { it.descriptor == d } }
-                .map {
-                    UberResolver.by[it] ?: throw ExtensionLoadException(
-                        it,
-                        message = "The extension: '$it' has not been cached in this instance!"
-                    )
-                }
-                .toSet()
+                        is ExtensionNode -> {
+                            value.runtimeModel
+                        }
 
-            val descriptor = if (possibleSupers.isEmpty()) {
-                return@asyncJob listOf()
-            } else if (possibleSupers.size > 1) {
-                throw StructuredException(
-                    ExtLoaderExceptions.ExtensionLoadException,
-                    message = "Illegal state loading extensions. The extension group: '$extensions' must all have been cached together."
+                        else -> throw Exception("This should not happen")
+                    }
                 )
-            } else {
-                possibleSupers.first()
             }
-
-            val extensions = graph.get(
-                descriptor,
-                UberResolver
-            )().merge()
-                .buildTree()
-                .toList()
-                .filterIsInstance<ExtensionNode>()
-
-            loaded.clear()
-            loaded.addAll(extensions)
-
-            extensions
-        }.handleStructuredException()
+        }
     }
 
-    override fun tweak(
+    override suspend fun load(
+        extensions: List<ExtensionDescriptor>
+    ): List<ExtensionNode> {
+        val possibleSupers = extensions
+            .filterNot { d -> loaded.any { it.descriptor == d } }
+            .map {
+                UberResolver.by[it] ?: throw ExtensionLoadException(
+                    it,
+                    message = "The extension: '$it' has not been cached in this instance!"
+                )
+            }
+            .toSet()
+
+        val descriptor = if (possibleSupers.isEmpty()) {
+            return listOf()
+        } else if (possibleSupers.size > 1) {
+            throw StructuredException(
+                ExtLoaderExceptions.ExtensionLoadException,
+                description = "Illegal state loading extensions. The extension group: '$extensions' must all have been cached together."
+            )
+        } else {
+            possibleSupers.first()
+        }
+
+        val extensions = graph.get(
+            descriptor,
+            UberResolver
+        )
+            .buildTree()
+            .toList()
+            .filterIsInstance<ExtensionNode>()
+
+        loaded.clear()
+        loaded.addAll(extensions)
+
+        return extensions
+    }
+
+    override suspend fun tweak(
         extensions: List<ExtensionNode>,
         environment: ExtensionEnvironment
-    ): AsyncJob<Unit> = asyncJob {
-        runCatching {
-            checkRegistration(environment)
+    ) {
+        checkRegistration(environment)
 
-            val uberTweakerParents = extensions
-                .filter { archive ->
-                    val erm = extensionResolver.accessBridge.ermFor(archive.descriptor)
-                    erm.partitions.any { model -> model.name == "tweaker" }
-                }
-                .map { archive ->
-                    UberParentRequest(
-                        PartitionArtifactRequest(
-                            archive.descriptor,
-                            "tweaker",
-                            rootEnvironment.name
-                        ),
-                        extensionResolver.accessBridge.repositoryFor(archive.descriptor),
-                        extensionResolver.partitionResolver
-                    )
-                }
-
-            val uberDescriptor = UberDescriptor("All Tweakers")
-            val uberTweakerRequest = UberArtifactRequest(
-                uberDescriptor,
-                uberTweakerParents,
-            )
-
-            graph.cacheAsync(
-                uberTweakerRequest,
-                UberRepositorySettings,
-                UberResolver
-            )().merge()
-
-            val uberTweakers = graph.get(
-                uberDescriptor,
-                UberResolver
-            )().merge()
-
-            val tweakers = extensions
-                .mapNotNull { archive ->
-                    uberTweakers.access
-                        .targets
-                        .map { target -> target.relationship.node }
-                        .filterIsInstance<ExtensionPartitionContainer<TweakerPartitionNode, *>>()
-                        .find { container -> container.descriptor.extension == archive.descriptor }
-                }
-                .reversed()
-                .filterDuplicates()
-
-            val tweaked: MutableSet<ExtensionDescriptor> = HashSet()
-
-            tweakers.forEach {
-                if (tweaked.add(it.descriptor.extension)) {
-                    it.node.tweaker.tweak(environment)().merge()
-                }
+        val uberTweakerParents = extensions
+            .filter { archive ->
+                val erm = extensionResolver.accessBridge.ermFor(archive.descriptor)
+                erm.partitions.any { model -> model.name == "tweaker" }
             }
-        }.handleStructuredException()
+            .map { archive ->
+                UberParentRequest(
+                    PartitionArtifactRequest(
+                        archive.descriptor,
+                        "tweaker",
+                        rootEnvironment.name
+                    ),
+                    extensionResolver.accessBridge.repositoryFor(archive.descriptor),
+                    extensionResolver.partitionResolver
+                )
+            }
+
+        val uberDescriptor = UberDescriptor("All Tweakers")
+        val uberTweakerRequest = UberArtifactRequest(
+            uberDescriptor,
+            uberTweakerParents,
+        )
+
+        graph.cache(
+            uberTweakerRequest,
+            UberRepositorySettings,
+            UberResolver
+        )
+
+        val uberTweakers = graph.get(
+            uberDescriptor,
+            UberResolver
+        )
+
+        val tweakers = extensions
+            .mapNotNull { archive ->
+                uberTweakers.access
+                    .targets
+                    .map { target -> target.relationship.node }
+                    .filterIsInstance<ExtensionPartitionContainer<TweakerPartitionNode, *>>()
+                    .find { container -> container.descriptor.extension == archive.descriptor }
+            }
+            .reversed()
+            .filterDuplicates()
+
+        val tweaked: MutableSet<ExtensionDescriptor> = HashSet()
+
+        tweakers.forEach {
+            if (tweaked.add(it.descriptor.extension)) {
+                it.node.tweaker.tweak(environment)
+            }
+        }
     }
-
-    // TODO This needs some serious thought put into it.
-    override fun unload(
-        descriptor: ExtensionDescriptor,
-    ): AsyncJob<Unit> = asyncJob {
-        runCatching {
-            val node = loaded.find { it.descriptor == descriptor }
-            if (node != null) {
-                val reloadable = node.runtimeModel.attributes[UNLOADABLE_ATTR_KEY] != "false"
-
-                if (!reloadable) {
-                    throw StructuredException(
-                        ExtLoaderExceptions.ExtensionNotUnloadable,
-                        message = "This extension is not unloadable!"
-                    ) {
-                        descriptor asContext "Extension descriptor"
-                    }
-                }
-            } else {
-                return@asyncJob
-            }
-
-            val toUnload = buildUnloadableUberChild(
-                descriptor,
-                {
-                    (it as? ExtensionNode)?.let { it.runtimeModel.attributes[UNLOADABLE_ATTR_KEY] != "false" } != false
-                }
-            ) {
-                if (it !is ExtensionDescriptor) null
-                else {
-                    UberParentRequest(
-                        ExtensionArtifactRequest(it),
-                        ExtensionRepositorySettings.local(),
-                        extensionResolver
-                    )
-                }
-            }().merge() ?: return@asyncJob
-
-            val unloaded = graph
-                .unload(toUnload)().merge()
-                .filterIsInstance<ExtensionNode>()
-
-            loaded.removeAll(unloaded)
-
-            val environments = HashSet<String>()
-
-            // Unloading partitions
-            for (extensionNode in unloaded) {
-                val partitions = graph.nodes()
-                    .map { it.descriptor }
-                    .filterIsInstance<PartitionDescriptor>()
-                    .filter {
-                        it.extension == extensionNode.descriptor
-                    }
-
-                for (descriptor in partitions) {
-                    environments.add(descriptor.environment)
-
-                    // Assume that everything in here is unloadable
-                    val unloadablePartition = buildUnloadableUberChild(
-                        descriptor,
-                    ) {
-                        if (it !is PartitionDescriptor) null
-                        else {
-                            UberParentRequest(
-                                PartitionArtifactRequest(it),
-                                ExtensionRepositorySettings.local(),
-                                extensionResolver.partitionResolver
-                            )
-                        }
-                    }().merge() ?: descriptor
-
-                    graph.unload(
-                        unloadablePartition
-                    )().merge()
-                }
-            }
-
-            for (name in environments) {
-                val environment = environmentRegistry.get(name)!!
-
-                environment[ExtensionUnloader]?.cleanup(
-                    unloaded
-                )?.invoke()?.merge()
-            }
-        }.handleStructuredException()
-    }
-
-//    override fun compose(): ExtensionLoader {
-//        val env = environment.compose()
 //
-//        val newGraph = ChildDefaultArchiveGraph(graph)
-//        val newPartitionResolver = DefaultPartitionResolver(
-//            extensionResolver.accessBridge,
-//            env
-//        )
-//        newGraph.registerResolver(newPartitionResolver)
+//    override suspend fun unload(
+//        descriptor: ExtensionDescriptor,
+//    ) {
+//        val node = loaded.find { it.descriptor == descriptor }
+//        if (node != null) {
+//            val reloadable = node.runtimeModel.attributes[UNLOADABLE_ATTR_KEY] != "false"
 //
-//        return DefaultExtensionLoader(
-//            extensionResolver,
-//            newPartitionResolver,
-//            newGraph,
-//            env,
-//            this
-//        )
+//            if (!reloadable) {
+//                throw StructuredException(
+//                    ExtLoaderExceptions.ExtensionNotUnloadable,
+//                    description = "This extension is not unloadable!"
+//                ) {
+//                    descriptor asContext "Extension descriptor"
+//                }
+//            }
+//        } else {
+//            return
+//        }
+//
+//        val toUnload = buildUnloadableUberChild(
+//            descriptor,
+//            {
+//                (it as? ExtensionNode)?.let { it.runtimeModel.attributes[UNLOADABLE_ATTR_KEY] != "false" } != false
+//            }
+//        ) {
+//            if (it !is ExtensionDescriptor) null
+//            else {
+//                UberParentRequest(
+//                    ExtensionArtifactRequest(it),
+//                    ExtensionRepositorySettings.local(),
+//                    extensionResolver
+//                )
+//            }
+//        } ?: return
+//
+//        val unloaded = graph
+//            .unload(toUnload)
+//            .filterIsInstance<ExtensionNode>()
+//
+//        loaded.removeAll(unloaded)
+//
+//        val environments = HashSet<String>()
+//
+//        // Unloading partitions
+//        for (extensionNode in unloaded) {
+//            val partitions = graph.nodes()
+//                .map { it.descriptor }
+//                .filterIsInstance<PartitionDescriptor>()
+//                .filter {
+//                    it.extension == extensionNode.descriptor
+//                }
+//
+//            for (descriptor in partitions) {
+//                environments.add(descriptor.environment)
+//
+//                // Assume that everything in here is unloadable
+//                val unloadablePartition = buildUnloadableUberChild(
+//                    descriptor,
+//                ) {
+//                    if (it !is PartitionDescriptor) null
+//                    else {
+//                        UberParentRequest(
+//                            PartitionArtifactRequest(it),
+//                            ExtensionRepositorySettings.local(),
+//                            extensionResolver.partitionResolver
+//                        )
+//                    }
+//                } ?: descriptor
+//
+//                graph.unload(
+//                    unloadablePartition
+//                )
+//            }
+//        }
+//
+//        for (name in environments) {
+//            val environment = environmentRegistry.get(name)!!
+//
+//            environment.find(ExtensionUnloader)?.cleanup(
+//                unloaded
+//            )
+//        }
 //    }
 
-    private fun buildUnloadableUberChild(
+    private suspend fun buildUnloadableUberChild(
         child: ArtifactMetadata.Descriptor,
         unloadable: (ArchiveNode<*>) -> Boolean = { true },
         requestBuilder: (ArtifactMetadata.Descriptor) -> UberParentRequest<*, *, *>?
-    ): AsyncJob<UberDescriptor?> = asyncJob {
-        val uber = UberResolver.by[child] ?: return@asyncJob null
+    ): UberDescriptor? {
+        val uber = UberResolver.by[child] ?: return null
 
-        val targets = (graph.getNode(uber) ?: return@asyncJob null)
+        val targets = (graph.getNode(uber) ?: return null)
             .access
             .targets
             .map { it.relationship }
@@ -345,15 +335,15 @@ public open class DefaultExtensionLoader(
                 ),
                 UberRepositorySettings,
                 UberResolver
-            )().merge()
+            )
 
             graph.get(
                 descriptor,
                 UberResolver
-            )().merge()
+            )
         }
 
-        uber
+        return uber
     }
 
     private fun ArchiveNode<*>.buildTree(): Tree<ArchiveNode<*>> {

@@ -1,13 +1,7 @@
 package dev.extframework.tooling.api.uber
 
-import com.durganmcbroom.artifact.resolver.ArtifactMetadata
+import com.durganmcbroom.artifact.resolver.*
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata.Descriptor
-import com.durganmcbroom.artifact.resolver.ArtifactRepository
-import com.durganmcbroom.artifact.resolver.ArtifactRequest
-import com.durganmcbroom.artifact.resolver.RepositoryFactory
-import com.durganmcbroom.artifact.resolver.RepositorySettings
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
 import dev.extframework.boot.archive.ArchiveAccessTree
 import dev.extframework.boot.archive.ArchiveNode
 import dev.extframework.boot.archive.ArchiveNodeResolver
@@ -85,8 +79,8 @@ public object UberArtifactRepository :
     override val name: String = "uber"
     override val settings: UberRepositorySettings = UberRepositorySettings
 
-    override fun get(request: UberArtifactRequest): AsyncJob<UberArtifactMetadata> = asyncJob {
-        UberArtifactMetadata(request.descriptor, request.parents)
+    override suspend fun get(request: UberArtifactRequest): UberArtifactMetadata {
+        return UberArtifactMetadata(request.descriptor, request.parents)
     }
 }
 

@@ -2,10 +2,6 @@ package dev.extframework.extloader.extension.partition
 
 import com.durganmcbroom.artifact.resolver.*
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenDescriptor
-import com.durganmcbroom.jobs.Job
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
-import com.durganmcbroom.jobs.job
 import com.durganmcbroom.resources.Resource
 import dev.extframework.archives.ArchiveReference
 import dev.extframework.archives.Archives
@@ -13,6 +9,7 @@ import dev.extframework.archives.zip.ZipFinder
 import dev.extframework.boot.archive.*
 import dev.extframework.boot.audit.Auditors
 import dev.extframework.boot.constraint.registerConstraintNegotiator
+import dev.extframework.boot.monad.Either
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
 import dev.extframework.common.util.filterDuplicates
@@ -41,15 +38,16 @@ public open class DefaultPartitionResolver(
     private val environmentRegistry: EnvironmentRegistry,
     private val defaultEnvironment: String
 ) : PartitionResolver, RegisterAuditor {
-    private val factory = PartitionRepositoryFactory { p, settings ->
+    override val factory: PartitionRepositoryFactory = PartitionRepositoryFactory { p, settings ->
         bridge.ermFor(p.extension).partitions.find {
             it.name == p.partition
         }?.takeIf { bridge.repositoryFor(p.extension) == settings }
     }
 
     override val apiVersion: Int = TOOLING_API_VERSION
-    override val context: ResolutionContext<ExtensionRepositorySettings, PartitionArtifactRequest, PartitionArtifactMetadata>
-        get() = factory.createContext()
+
+    //    override val context: ResolutionContext<ExtensionRepositorySettings, PartitionArtifactRequest, PartitionArtifactMetadata>
+//        get() = factory.createContext()
     override val name: String
         get() = "extension-partition"
 
@@ -74,7 +72,7 @@ public open class DefaultPartitionResolver(
         env: String
     ): Nothing = throw StructuredException(
         InternalExceptions.UnknownEnvironmentException,
-        message = "Unknown environment $env"
+        description = "Unknown environment $env"
     ) {
         solution("Please registry this environment with the EnvironmentRegistry.")
         environmentRegistry.objects().keys asContext "Registered environments"
@@ -104,23 +102,21 @@ public open class DefaultPartitionResolver(
         prm: PartitionRuntimeModel,
         erm: ExtensionRuntimeModel,
         archive: ArchiveReference?
-    ): Job<ExtensionPartitionMetadata> = job {
-        parsedMetadata[erm.descriptor to (prm.name)] ?: loader.parseMetadata(
-            prm,
-            archive,
-            object : PartitionMetadataHelper {
-                override val erm: ExtensionRuntimeModel = erm
-            }
-        )().merge().also {
-            parsedMetadata[erm.descriptor to (prm.name)] = it
+    ): ExtensionPartitionMetadata = parsedMetadata[erm.descriptor to (prm.name)] ?: loader.parseMetadata(
+        prm,
+        archive,
+        object : PartitionMetadataHelper {
+            override val erm: ExtensionRuntimeModel = erm
         }
+    ).also {
+        parsedMetadata[erm.descriptor to (prm.name)] = it
     }
 
     override fun load(
         data: ArchiveData<PartitionDescriptor, CachedArchiveResource>,
         accessTree: ArchiveAccessTree,
         helper: ResolutionHelper
-    ): Job<ExtensionPartitionContainer<*, *>> = job {
+    ): ExtensionPartitionContainer<*, *> {
         val archive = data.resources["partition.jar"]?.path?.let { Archives.find(it, ZipFinder) }
         val erm = bridge.ermFor(data.descriptor.extension)
         // Should never be null if getting to this stage.
@@ -131,11 +127,11 @@ public open class DefaultPartitionResolver(
             it.name == prm.name
         } ?: throw PartitionLoadException(prm.name, "Partition not defined in the erm!") {
             erm.descriptor asContext "Extension"
-        }, erm, archive)().merge()
+        }, erm, archive)
 
         val parentLoader = bridge.classLoaderFor(data.descriptor.extension)
 
-        loader.load(
+        return loader.load(
             metadata,
             archive,
             object : PartitionAccessTree {
@@ -153,7 +149,7 @@ public open class DefaultPartitionResolver(
 
                 override fun metadataFor(
                     partition: String
-                ): Job<ExtensionPartitionMetadata> = job() {
+                ): ExtensionPartitionMetadata =
                     parsedMetadata[erm.descriptor to (partition)]
                         ?: throw ExtensionLoadException(
                             data.descriptor.extension,
@@ -164,20 +160,20 @@ public open class DefaultPartitionResolver(
                             prm.name asContext "Partition name"
                             partition asContext "Requested partition name"
                         }
-                }
 
                 override fun get(name: String): CachedArchiveResource? {
                     return data.resources[name]
                 }
             }
-        )().merge()
+        )
     }
 
-    override fun cache(
-        artifact: Artifact<PartitionArtifactMetadata>,
+    override suspend fun cache(
+        metadata: PartitionArtifactMetadata,
+        parents: List<Tree<Either<PartitionArtifactMetadata, TaggedIArchive>>>,
         helper: CacheHelper<PartitionDescriptor>
-    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> = asyncJob {
-        val descriptor = artifact.metadata.descriptor
+    ): Tree<TaggedIArchive> {
+        val descriptor = metadata.descriptor
         val erm = bridge.ermFor(descriptor.extension)
         val prm = erm.namedPartitions[descriptor.partition]
             ?: throw PartitionLoadException(
@@ -189,23 +185,24 @@ public open class DefaultPartitionResolver(
         val loader = getLoader(prm, descriptor.environment)
         val environment = environmentRegistry.get(descriptor.environment)
             ?: unknownEnvironment(descriptor.environment)
-        val dependencyTypes = environment[dependencyTypesAttrKey]!!.container
+        val dependencyTypes = environment[dependencyTypesAttrKey].container
 
-        helper.withResource("partition.jar", artifact.metadata.resource)
+        helper.withResource("partition.jar", metadata.resource)
 
         val dependencies = cachePartitionDependencies(
             prm,
             descriptor.extension.artifact,
             dependencyTypes,
             helper
-        )().merge()
+        )
 
-        loader.cache(
-            artifact,
+        return loader.cache(
+            metadata,
+            parents,
             DefaultPartitionCacheHelper(
                 erm, prm, helper, descriptor, dependencies
             )
-        )().merge()
+        )
     }
 
     private inner class DefaultPartitionCacheHelper(
@@ -217,10 +214,10 @@ public open class DefaultPartitionResolver(
     ) : PartitionCacheHelper {
         override val defaultEnvironment: String = this@DefaultPartitionResolver.defaultEnvironment
 
-        override fun cache(
+        override suspend fun cache(
             reference: String,
             environment: String
-        ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> {
+        ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>> {
             return cache(
                 PartitionArtifactRequest(
                     PartitionDescriptor(
@@ -234,12 +231,12 @@ public open class DefaultPartitionResolver(
             )
         }
 
-        override fun cache(
+        override suspend fun cache(
             partition: String,
             environment: String,
             parent: ExtensionParent
-        ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> = asyncJob {
-            cache(
+        ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>> {
+            return cache(
                 PartitionArtifactRequest(
                     PartitionDescriptor(
                         parent.toDescriptor(),
@@ -249,24 +246,24 @@ public open class DefaultPartitionResolver(
                 ),
                 bridge.repositoryFor(parent.toDescriptor()),
                 this@DefaultPartitionResolver
-            )().merge()
+            )
         }
 
         // Delegation
         override val trace: ArchiveTrace by helper::trace
 
-        override fun <D : ArtifactMetadata.Descriptor, T : ArtifactRequest<D>, R : RepositorySettings> cache(
+        override suspend fun <D : ArtifactMetadata.Descriptor, T : ArtifactRequest<D>, R : RepositorySettings> cache(
             request: T,
             repository: R,
             resolver: ArchiveNodeResolver<D, T, *, R, *>
-        ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> {
+        ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>> {
             return helper.cache(request, repository, resolver)
         }
 
-        override fun <D : ArtifactMetadata.Descriptor, M : ArtifactMetadata<D, *>> cache(
-            artifact: Artifact<M>,
+        override suspend fun <D : ArtifactMetadata.Descriptor, M : ArtifactMetadata<D, *>> cache(
+            artifact: Tree<Either<M, TaggedIArchive>>,
             resolver: ArchiveNodeResolver<D, *, *, *, M>
-        ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> {
+        ): Tree<TaggedIArchive> {
             return helper.cache(artifact, resolver)
         }
 

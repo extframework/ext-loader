@@ -2,9 +2,6 @@ package dev.extframework.extloader.extension.partition.artifact
 
 import com.durganmcbroom.artifact.resolver.ArtifactRepository
 import com.durganmcbroom.artifact.resolver.MetadataRequestException
-import com.durganmcbroom.jobs.JobName
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
 import com.durganmcbroom.resources.ResourceNotFoundException
 import dev.extframework.tooling.api.extension.PartitionRuntimeModel
 import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
@@ -20,9 +17,9 @@ public open class PartitionArtifactRepository(
     override val name: String = "partitions@${settings.layout.name}"
     private val layout by settings::layout
 
-    override fun get(
+    override suspend fun get(
         request: PartitionArtifactRequest
-    ): AsyncJob<PartitionArtifactMetadata> = asyncJob(JobName("Load extension metadata for: '${request.descriptor}'")) {
+    ): PartitionArtifactMetadata {
         val (extensionDescriptor, partition) = request.descriptor
         val (group, artifact, version) = extensionDescriptor
 
@@ -46,7 +43,7 @@ public open class PartitionArtifactRepository(
             throw e
         }
 
-        PartitionArtifactMetadata(
+        return PartitionArtifactMetadata(
             request.descriptor,
             jar,
         )

@@ -1,15 +1,15 @@
 package dev.extframework.tooling.api.extension.partition
 
 import com.durganmcbroom.artifact.resolver.Artifact
-import com.durganmcbroom.jobs.Job
-import com.durganmcbroom.jobs.async.AsyncJob
 import dev.extframework.archives.ArchiveHandle
 import dev.extframework.archives.ArchiveReference
 import dev.extframework.boot.archive.*
+import dev.extframework.boot.monad.Either
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
-import dev.extframework.tooling.api.extension.*
-import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactMetadata
+import dev.extframework.tooling.api.extension.ExtensionParent
+import dev.extframework.tooling.api.extension.ExtensionRuntimeModel
+import dev.extframework.tooling.api.extension.PartitionRuntimeModel
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifactMetadata
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionDescriptor
 
@@ -29,7 +29,7 @@ public interface PartitionLoaderHelper {
 
     public fun metadataFor(
         partition: String
-    ): Job<ExtensionPartitionMetadata>
+    ): ExtensionPartitionMetadata
 
     public operator fun get(name: String): CachedArchiveResource?
 }
@@ -52,16 +52,16 @@ public interface PartitionCacheHelper : CacheHelper<PartitionDescriptor> {
 //        partition: PartitionRuntimeModel,
 //    ) : AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
 
-    public fun cache(
+    public suspend fun cache(
         partition: String,
         environment: String
-    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
+    ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>
 
-    public fun cache(
+    public suspend fun cache(
         partition: String,
         environment: String,
         parent: ExtensionParent,
-    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
+    ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>
 }
 
 //public val PartitionCacheHelper.currentEnvironment: String
@@ -74,7 +74,7 @@ public interface ExtensionPartitionLoader<T : ExtensionPartitionMetadata> {
         partition: PartitionRuntimeModel,
         reference: ArchiveReference?,
         helper: PartitionMetadataHelper
-    ): Job<T>
+    ): T
 
     // TODO decide if reference should remain as a parameter here or should be forced to be included
     //   as a property in T. Reasoning behind this is that in both Main and Target partitions this reference
@@ -87,10 +87,11 @@ public interface ExtensionPartitionLoader<T : ExtensionPartitionMetadata> {
         reference: ArchiveReference?,
         accessTree: PartitionAccessTree,
         helper: PartitionLoaderHelper
-    ): Job<ExtensionPartitionContainer<*, T>>
+    ): ExtensionPartitionContainer<*, T>
 
-    public fun cache(
-        artifact: Artifact<PartitionArtifactMetadata>,
+    public suspend fun cache(
+        metadata: PartitionArtifactMetadata,
+        parents: List<Tree<Either<PartitionArtifactMetadata, TaggedIArchive>>>,
         helper: PartitionCacheHelper
-    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
+    ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>
 }

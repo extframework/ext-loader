@@ -1,6 +1,5 @@
 package dev.extframework.tooling.api
 
-import com.durganmcbroom.jobs.async.AsyncJob
 import dev.extframework.boot.archive.ArchiveGraph
 import dev.extframework.boot.monad.Tree
 import dev.extframework.tooling.api.environment.EnvironmentRegistry
@@ -27,24 +26,25 @@ public interface ExtensionLoader : ExtensionEnvironment.Attribute {
     public companion object : ExtensionEnvironment.Attribute.Key<ExtensionLoader>
 
     // Environment INDEPENDENT operations
-    public fun cache(
+    public suspend fun cache(
         requests: Map<ExtensionDescriptor, ExtensionRepositorySettings>
-    ): AsyncJob<List<Tree<ExtensionData>>>
+    ): List<Tree<ExtensionData>>
 
-    public fun load(
+    public suspend fun load(
         extensions: List<ExtensionDescriptor>
-    ): AsyncJob<List<ExtensionNode>>
+    ): List<ExtensionNode>
 
     // Environment DEPENDENT operations
-    public fun tweak(
+    public suspend fun tweak(
         extensions: List<ExtensionNode>,
         environment: ExtensionEnvironment
-    ): AsyncJob<Unit>
+    )
 
-    // TODO serious thought
-    public fun unload(
-        descriptor: ExtensionDescriptor
-    ): AsyncJob<Unit>
+//    // TODO serious thought
+//    public suspend fun unload(
+//        descriptor: ExtensionDescriptor,
+//
+//    )
 
     public data class ExtensionData(
         val descriptor: ExtensionDescriptor,

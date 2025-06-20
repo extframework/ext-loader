@@ -1,6 +1,5 @@
-package dev.extframework.extloader.exception
+package dev.extframework.tooling.api.exception
 
-import dev.extframework.tooling.api.exception.ExceptionContextSerializer
 import java.nio.file.Path
 import kotlin.reflect.KClass
 

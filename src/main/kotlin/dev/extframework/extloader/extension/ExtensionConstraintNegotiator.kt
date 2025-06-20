@@ -2,8 +2,6 @@ package dev.extframework.extloader.extension
 
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenDescriptor
-import com.durganmcbroom.jobs.Job
-import com.durganmcbroom.jobs.map
 import dev.extframework.boot.archive.ArchiveTrace
 import dev.extframework.boot.constraint.Constrained
 import dev.extframework.boot.constraint.ConstraintNegotiator
@@ -23,7 +21,7 @@ public class ExtensionConstraintNegotiator<T : ArtifactMetadata.Descriptor>(
     override fun negotiate(
         constraints: Set<Constrained<T>>,
         trace: ArchiveTrace
-    ): Job<T> {
+    ): T {
         val conversion = HashMap<SimpleMavenDescriptor, T>()
 
         return maven.negotiate(constraints.mapTo(HashSet()) {
@@ -34,7 +32,7 @@ public class ExtensionConstraintNegotiator<T : ArtifactMetadata.Descriptor>(
                 mavenDesc,
                 it.type
             )
-        }, trace).map {
+        }, trace).let {
             conversion[it]!!
         }
     }

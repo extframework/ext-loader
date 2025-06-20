@@ -1,6 +1,5 @@
 package dev.extframework.tooling.api.extension
 
-import com.durganmcbroom.jobs.result
 import dev.extframework.boot.archive.ArchiveNodeResolver
 import dev.extframework.boot.archive.ArchiveTrace
 import dev.extframework.boot.util.requireKeyInDescriptor
@@ -19,7 +18,7 @@ public interface ExtensionResolver : ArchiveNodeResolver<
         ExtensionNode,
         ExtensionRepositorySettings,
         ExtensionArtifactMetadata> {
-    public val partitionResolver : PartitionResolver
+    public val partitionResolver: PartitionResolver
 
     override val name: String
         get() = "extension"
@@ -34,8 +33,8 @@ public interface ExtensionResolver : ArchiveNodeResolver<
     override fun deserializeDescriptor(
         descriptor: Map<String, String>,
         trace: ArchiveTrace
-    ): Result<ExtensionDescriptor> = result {
-        ExtensionDescriptor.parseDescriptor(descriptor.requireKeyInDescriptor("descriptor") { trace })
+    ): ExtensionDescriptor {
+        return ExtensionDescriptor.parseDescriptor(descriptor.requireKeyInDescriptor("descriptor") { trace })
     }
 
     override fun serializeDescriptor(

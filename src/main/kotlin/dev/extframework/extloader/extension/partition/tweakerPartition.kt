@@ -1,24 +1,20 @@
 package dev.extframework.extloader.extension.partition
 
 import com.durganmcbroom.artifact.resolver.Artifact
-import com.durganmcbroom.jobs.Job
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
-import com.durganmcbroom.jobs.async.mapAsync
-import com.durganmcbroom.jobs.job
 import dev.extframework.archives.ArchiveHandle
 import dev.extframework.archives.ArchiveReference
 import dev.extframework.boot.archive.ArchiveException
 import dev.extframework.boot.archive.ArchiveNodeResolver
 import dev.extframework.boot.archive.IArchive
+import dev.extframework.boot.archive.TaggedIArchive
+import dev.extframework.boot.monad.Either
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
+import dev.extframework.boot.util.mapAsync
 import dev.extframework.common.util.runCatching
 import dev.extframework.tooling.api.extension.PartitionRuntimeModel
-import dev.extframework.tooling.api.extension.descriptor
 import dev.extframework.tooling.api.extension.partition.*
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifactMetadata
-import dev.extframework.tooling.api.extension.partition.artifact.partition
 import dev.extframework.tooling.api.tweaker.EnvironmentTweaker
 import kotlinx.coroutines.awaitAll
 import java.nio.file.Path
@@ -35,7 +31,7 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
         partition: PartitionRuntimeModel,
         reference: ArchiveReference?,
         helper: PartitionMetadataHelper,
-    ): Job<TweakerPartitionMetadata> = job {
+    ): TweakerPartitionMetadata {
         if (reference == null) throw PartitionLoadException(
             partition.name,
             "The tweaker partition must have a jar."
@@ -44,7 +40,7 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
         val tweakerCls = partition.options["tweaker-class"]
             ?: throw IllegalArgumentException("Tweaker partition from extension: '${partition.name}' must contain a tweaker class defined as option: 'tweaker-class'.")
 
-        TweakerPartitionMetadata(tweakerCls)
+        return TweakerPartitionMetadata(tweakerCls)
     }
 
     override fun load(
@@ -52,7 +48,7 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
         reference: ArchiveReference?,
         accessTree: PartitionAccessTree,
         helper: PartitionLoaderHelper
-    ): Job<ExtensionPartitionContainer<*, TweakerPartitionMetadata>> = job {
+    ): ExtensionPartitionContainer<*, TweakerPartitionMetadata> {
         if (reference == null) throw PartitionLoadException(
             metadata.name,
             "The tweaker partition must have a jar."
@@ -76,7 +72,8 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
             handle.classloader.loadClass(
                 metadata.tweakerClass
             )
-        } ?: throw IllegalArgumentException("Could not load tweaker partition: '${metadata.name}' because the class: '${metadata.tweakerClass}' couldnt be found.")
+        }
+            ?: throw IllegalArgumentException("Could not load tweaker partition: '${metadata.name}' because the class: '${metadata.tweakerClass}' couldnt be found.")
 
         val extensionConstructor =
             runCatching(NoSuchMethodException::class) { extensionClass.getConstructor() }
@@ -92,30 +89,30 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
             reference.location.toPath(),
         )
 
-        ExtensionPartitionContainer(helper.descriptor, metadata, node)
+        return ExtensionPartitionContainer(helper.descriptor, metadata, node)
     }
 
-    override fun cache(
-        artifact: Artifact<PartitionArtifactMetadata>,
+    override suspend fun cache(
+        metadata: PartitionArtifactMetadata,
+        parents: List<Tree<Either<PartitionArtifactMetadata, TaggedIArchive>>>,
         helper: PartitionCacheHelper
-    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> = asyncJob {
+    ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>> {
         val parents = helper.erm.parents
             .mapAsync {
-                val result = helper.cache("tweaker", helper.defaultEnvironment, it)()
-
-                val exception = result.exceptionOrNull()
-
-                if (exception != null && exception !is ArchiveException.ArchiveNotFound) {
-                    throw exception
+                try {
+                    helper.cache("tweaker", helper.defaultEnvironment, it)
+                } catch (_: ArchiveException.ArchiveNotFound) {
+                    // Nothing
+                    null
+                } catch (e: Throwable) {
+                    throw e
                 }
-
-                result.getOrNull()
             }
             .awaitAll()
             .filterNotNull()
 
-        helper.newData(
-            artifact.metadata.descriptor,
+        return helper.newData(
+            metadata.descriptor,
             parents
         )
     }

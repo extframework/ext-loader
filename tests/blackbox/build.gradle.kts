@@ -1,8 +1,4 @@
 import dev.extframework.gradle.common.archives
-import dev.extframework.gradle.common.boot
-import dev.extframework.gradle.common.dm.artifactResolver
-import dev.extframework.gradle.common.dm.jobs
-import dev.extframework.gradle.common.extFramework
 import dev.extframework.gradle.common.objectContainer
 
 group = "dev.extframework.test"
@@ -10,11 +6,8 @@ group = "dev.extframework.test"
 version = "1.0"
 
 dependencies {
-    boot()
     objectContainer()
-    jobs()
-    artifactResolver()
-    archives(mixin = true)
+    archives()
     implementation(project(":tooling-api"))
 }
 

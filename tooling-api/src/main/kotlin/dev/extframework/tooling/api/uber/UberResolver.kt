@@ -1,28 +1,11 @@
 package dev.extframework.tooling.api.uber
 
-import com.durganmcbroom.artifact.resolver.Artifact
-import com.durganmcbroom.artifact.resolver.ArtifactMetadata
-import com.durganmcbroom.artifact.resolver.ArtifactRequest
-import com.durganmcbroom.artifact.resolver.RepositorySettings
-import com.durganmcbroom.artifact.resolver.ResolutionContext
-import com.durganmcbroom.artifact.resolver.createContext
-import com.durganmcbroom.jobs.Job
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
-import com.durganmcbroom.jobs.async.mapAsync
-import com.durganmcbroom.jobs.job
-import com.durganmcbroom.jobs.result
-import dev.extframework.boot.archive.ArchiveAccessTree
-import dev.extframework.boot.archive.ArchiveData
-import dev.extframework.boot.archive.ArchiveNodeResolver
-import dev.extframework.boot.archive.ArchiveRelationship
-import dev.extframework.boot.archive.ArchiveTrace
-import dev.extframework.boot.archive.CacheHelper
-import dev.extframework.boot.archive.CachedArchiveResource
-import dev.extframework.boot.archive.IArchive
-import dev.extframework.boot.archive.ResolutionHelper
+import com.durganmcbroom.artifact.resolver.*
+import dev.extframework.boot.archive.*
+import dev.extframework.boot.monad.Either
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
+import dev.extframework.boot.util.mapAsync
 import dev.extframework.boot.util.requireKeyInDescriptor
 import kotlinx.coroutines.awaitAll
 import java.nio.file.Path
@@ -38,8 +21,7 @@ public object UberResolver : ArchiveNodeResolver<
         UberNode,
         UberRepositorySettings,
         UberArtifactMetadata> {
-    override val context: ResolutionContext<UberRepositorySettings, UberArtifactRequest, UberArtifactMetadata> =
-        UberRepositoryFactory.createContext()
+    override val factory: UberRepositoryFactory = UberRepositoryFactory
     override val metadataType: Class<UberArtifactMetadata> = UberArtifactMetadata::class.java
     override val name: String = "uber-loader"
     override val nodeType: Class<in UberNode> = UberNode::class.java
@@ -47,15 +29,15 @@ public object UberResolver : ArchiveNodeResolver<
 
     // TODO this is somewhat hacky
     public val by: MutableMap<ArtifactMetadata.Descriptor, UberDescriptor> =
-        HashMap<ArtifactMetadata.Descriptor, UberDescriptor>()
+        HashMap()
 
     override fun deserializeDescriptor(
         descriptor: Map<String, String>,
         trace: ArchiveTrace
-    ): Result<UberDescriptor> = result {
+    ): UberDescriptor {
         val name = descriptor.requireKeyInDescriptor("name") { trace }
 
-        UberDescriptor(name)
+        return UberDescriptor(name)
     }
 
     override fun serializeDescriptor(descriptor: UberDescriptor): Map<String, String> {
@@ -74,7 +56,7 @@ public object UberResolver : ArchiveNodeResolver<
         data: ArchiveData<UberDescriptor, CachedArchiveResource>,
         accessTree: ArchiveAccessTree,
         helper: ResolutionHelper
-    ): Job<UberNode> = job {
+    ): UberNode {
         accessTree
             .targets
             .filter { it.relationship is ArchiveRelationship.Direct }
@@ -83,14 +65,15 @@ public object UberResolver : ArchiveNodeResolver<
                 by[desc] = data.descriptor
             }
 
-        UberNode(accessTree, data.descriptor)
+        return UberNode(accessTree, data.descriptor)
     }
 
-    override fun cache(
-        artifact: Artifact<UberArtifactMetadata>,
+    override suspend fun cache(
+        metadata: UberArtifactMetadata,
+        parents: List<Tree<Either<UberArtifactMetadata, TaggedIArchive>>>,
         helper: CacheHelper<UberDescriptor>
-    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> = asyncJob {
-        fun <
+    ): Tree<TaggedIArchive> {
+        suspend fun <
                 D : ArtifactMetadata.Descriptor,
                 T : ArtifactRequest<D>,
                 R : RepositorySettings
@@ -100,18 +83,18 @@ public object UberResolver : ArchiveNodeResolver<
             req.resolver
         )
 
-        artifact.metadata.requestedParents.forEach {
-            by[it.request.descriptor] = artifact.metadata.descriptor
+        metadata.requestedParents.forEach {
+            by[it.request.descriptor] = metadata.descriptor
         }
 
-        val parents = artifact.metadata.requestedParents.mapAsync {
+        val parents = metadata.requestedParents.mapAsync {
             cacheReq(
                 it
-            )().merge()
+            )
         }
 
-        helper.newData(
-            artifact.metadata.descriptor,
+        return helper.newData(
+            metadata.descriptor,
             parents.awaitAll(),
         )
     }

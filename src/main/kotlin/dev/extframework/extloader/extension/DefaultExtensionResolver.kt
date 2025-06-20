@@ -5,13 +5,6 @@ import com.durganmcbroom.artifact.resolver.ResolutionContext
 import com.durganmcbroom.artifact.resolver.createContext
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenDescriptor
 import com.durganmcbroom.artifact.resolver.simple.maven.layout.SimpleMavenDefaultLayout
-import com.durganmcbroom.jobs.Job
-import com.durganmcbroom.jobs.JobScope
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
-import com.durganmcbroom.jobs.async.mapAsync
-import com.durganmcbroom.jobs.job
-import com.durganmcbroom.jobs.mapException
 import com.durganmcbroom.resources.Resource
 import com.durganmcbroom.resources.toByteArray
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -20,9 +13,11 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import dev.extframework.boot.archive.*
 import dev.extframework.boot.audit.Auditors
 import dev.extframework.boot.constraint.registerConstraintNegotiator
+import dev.extframework.boot.monad.Either
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
 import dev.extframework.boot.util.basicObjectMapper
+import dev.extframework.boot.util.mapAsync
 import dev.extframework.extloader.extension.artifact.ExtensionArtifactRepository.Companion.parseSettings
 import dev.extframework.extloader.extension.artifact.ExtensionRepositoryFactory
 import dev.extframework.extloader.extension.partition.DefaultPartitionResolver
@@ -47,7 +42,7 @@ public open class DefaultExtensionResolver(
     defaultEnvironment: String
 ) : ExtensionResolver, RegisterAuditor {
     private val layerLoader = ExtensionLayerClassLoader(parent)
-    protected val factory: ExtensionRepositoryFactory = ExtensionRepositoryFactory()
+    override val factory: ExtensionRepositoryFactory = ExtensionRepositoryFactory()
 
     private val mapper = ObjectMapper().registerModule(KotlinModule.Builder().build())
 
@@ -62,8 +57,6 @@ public open class DefaultExtensionResolver(
     private val extensionClassloaders: MutableMap<String, ExtensionClassLoader> = HashMap()
 
     override val apiVersion: Int = TOOLING_API_VERSION
-    override val context: ResolutionContext<ExtensionRepositorySettings, ExtensionArtifactRequest, ExtensionArtifactMetadata>
-        get() = factory.createContext()
 
     override val accessBridge: ExtensionResolver.AccessBridge = object : ExtensionResolver.AccessBridge {
         private fun extensionNotPresent(descriptor: ExtensionDescriptor): Nothing {
@@ -106,7 +99,7 @@ public open class DefaultExtensionResolver(
         data: ArchiveData<ExtensionDescriptor, CachedArchiveResource>,
         accessTree: ArchiveAccessTree,
         helper: ResolutionHelper
-    ): Job<ExtensionNode> = job {
+    ): ExtensionNode {
         val erm = data.resources["erm.json"]!!.path.let {
             mapper.readValue<ExtensionRuntimeModel>(
                 Files.readAllBytes(it)
@@ -138,7 +131,7 @@ public open class DefaultExtensionResolver(
             .map(ArchiveRelationship.Direct::node)
             .filterIsInstance<ExtensionNode>()
 
-        ExtensionNode(
+        return ExtensionNode(
             data.descriptor,
             accessTree,
             parents,
@@ -147,44 +140,45 @@ public open class DefaultExtensionResolver(
         )
     }
 
-    override fun cache(
-        artifact: Artifact<ExtensionArtifactMetadata>,
+    override suspend fun cache(
+        metadata: ExtensionArtifactMetadata,
+        parents: List<Tree<Either<ExtensionArtifactMetadata, TaggedIArchive>>>,
         helper: CacheHelper<ExtensionDescriptor>
-    ): AsyncJob<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>> = asyncJob {
+    ): Tree<TaggedIArchive> {
         helper.withResource(
             "erm.json",
-            artifact.metadata.erm,
+            metadata.erm,
         )
 
         helper.withResource(
             "repository.json",
-            writeRepositoryToResource(artifact.metadata)
+            writeRepositoryToResource(metadata)
         )
 
-        extensionMetadata[artifact.metadata.descriptor.toIdentifier()] = ExtensionMetadata(
-            mapper.readValue<ExtensionRuntimeModel>(artifact.metadata.erm.open().toByteArray()),
-            artifact.metadata.repository,
+        extensionMetadata[metadata.descriptor.toIdentifier()] = ExtensionMetadata(
+            mapper.readValue<ExtensionRuntimeModel>(metadata.erm.open().toByteArray()),
+            metadata.repository,
         )
 
-        val parents = artifact.parents.mapAsync {
+        val parents = parents.mapAsync {
             helper.cache(
                 it,
                 this@DefaultExtensionResolver
-            )().merge()
+            )
         }
 
-        helper.newData(
-            artifact.metadata.descriptor,
+        return helper.newData(
+            metadata.descriptor,
             parents
                 .onEach { it.start() }
                 .awaitAll()
         )
     }
 
-    private fun JobScope.writeRepositoryToResource(metadata: ExtensionArtifactMetadata): Resource = Resource("<heap>") {
+    private fun writeRepositoryToResource(metadata: ExtensionArtifactMetadata): Resource = Resource("<heap>") {
         val repository = metadata.repository
 
-        runCatching {
+        try {
             ByteArrayInputStream(
                 basicObjectMapper.writeValueAsBytes(
                     mapOf(
@@ -194,11 +188,11 @@ public open class DefaultExtensionResolver(
                     )
                 )
             )
-        }.mapException {
-            ExtensionLoadException(metadata.descriptor, it) {
+        } catch (e: Throwable) {
+            throw ExtensionLoadException(metadata.descriptor, e) {
                 metadata.descriptor asContext "Extension name"
             }
-        }.merge()
+        }
     }
 
     private fun ExtensionDescriptor.toIdentifier(): String {

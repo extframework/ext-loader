@@ -1,6 +1,5 @@
 package dev.extframework.tooling.api.extension.partition
 
-import com.durganmcbroom.jobs.result
 import dev.extframework.boot.archive.ArchiveNodeResolver
 import dev.extframework.boot.archive.ArchiveTrace
 import dev.extframework.boot.util.requireKeyInDescriptor
@@ -26,17 +25,15 @@ public interface PartitionResolver : ArchiveNodeResolver<
     override fun deserializeDescriptor(
         descriptor: Map<String, String>,
         trace: ArchiveTrace
-    ): Result<PartitionDescriptor> = result {
-        PartitionDescriptor(
-            ExtensionDescriptor(
-                descriptor.requireKeyInDescriptor("group") { trace },
-                descriptor.requireKeyInDescriptor("artifact") { trace },
-                descriptor.requireKeyInDescriptor("version") { trace },
-            ),
-            descriptor.requireKeyInDescriptor("partition") { trace },
-            descriptor.requireKeyInDescriptor("environment") { trace }
-        )
-    }
+    ): PartitionDescriptor = PartitionDescriptor(
+        ExtensionDescriptor(
+            descriptor.requireKeyInDescriptor("group") { trace },
+            descriptor.requireKeyInDescriptor("artifact") { trace },
+            descriptor.requireKeyInDescriptor("version") { trace },
+        ),
+        descriptor.requireKeyInDescriptor("partition") { trace },
+        descriptor.requireKeyInDescriptor("environment") { trace }
+    )
 
     override fun serializeDescriptor(descriptor: PartitionDescriptor): Map<String, String> {
         return mapOf(

@@ -1,9 +1,5 @@
-package dev.extframework.extloader.exception
+package dev.extframework.tooling.api.exception
 
-import dev.extframework.tooling.api.exception.ExceptionContextSerializer
-import dev.extframework.tooling.api.exception.StackTracePrinter
-import dev.extframework.tooling.api.exception.StructuredException
-import java.awt.BasicStroke
 import java.io.OutputStream
 import java.io.PrintWriter
 import java.lang.StringBuilder
@@ -99,7 +95,7 @@ internal fun handleException(
     output.appendLine(" --> " + (causes
         .reversed()
         .filterIsInstance<StructuredException>()
-        .firstNotNullOfOrNull { it.message } ?: "No message provided"))
+        .firstNotNullOfOrNull { it.description } ?: "No message provided"))
 
     if (completeContext.isNotEmpty()) {
         output.appendLine("Context:")
@@ -120,15 +116,15 @@ internal fun handleException(
         }
     }
 
-    output.appendLine("Stacktrace (top-level cause):")
-
-    val printWriter = PrintWriter(object : OutputStream() {
-        override fun write(b: Int) {
-            output.append(b.toChar())
-        }
-    })
-    stackTracePrinter.printStacktrace(exception, printWriter)
-    printWriter.flush()
+//    output.appendLine("Stacktrace (top-level cause):")
+//
+//    val printWriter = PrintWriter(object : OutputStream() {
+//        override fun write(b: Int) {
+//            output.append(b.toChar())
+//        }
+//    })
+//    stackTracePrinter.printStacktrace(exception, printWriter)
+//    printWriter.flush()
 
     return output.toString()
 }

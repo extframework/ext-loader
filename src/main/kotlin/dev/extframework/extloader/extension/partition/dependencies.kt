@@ -3,9 +3,6 @@ package dev.extframework.extloader.extension.partition
 import com.durganmcbroom.artifact.resolver.ArtifactMetadata
 import com.durganmcbroom.artifact.resolver.ArtifactRequest
 import com.durganmcbroom.artifact.resolver.RepositorySettings
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
-import com.durganmcbroom.jobs.async.mapAsync
 import dev.extframework.boot.archive.ArchiveException
 import dev.extframework.boot.archive.ArchiveNodeResolver
 import dev.extframework.boot.archive.CacheHelper
@@ -15,16 +12,17 @@ import dev.extframework.boot.dependency.DependencyResolverProvider
 import dev.extframework.boot.dependency.DependencyTypeContainer
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
+import dev.extframework.boot.util.mapAsync
 import dev.extframework.tooling.api.extension.PartitionRuntimeModel
 import dev.extframework.tooling.api.extension.partition.PartitionLoadException
 import kotlinx.coroutines.Deferred
 
-internal fun cachePartitionDependencies(
+internal suspend fun cachePartitionDependencies(
     partition: PartitionRuntimeModel,
     extName: String,
     dependencyProviders: DependencyTypeContainer,
     helper: CacheHelper<*>
-): AsyncJob<List<Deferred<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>>> = asyncJob {
+): List<Deferred<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>> =
     partition.dependencies.mapAsync { dependency ->
         if (partition.repositories.isEmpty()) {
             throw PartitionLoadException(
@@ -72,23 +70,20 @@ internal fun cachePartitionDependencies(
             val resolver =
                 provider.resolver as DependencyResolver<ArtifactMetadata.Descriptor, ArtifactRequest<ArtifactMetadata.Descriptor>, *, RepositorySettings, *>
 
-            helper.cache(
-                request as ArtifactRequest<ArtifactMetadata.Descriptor>,
-                settings,
-                resolver
-            )()
+            runCatching {
+                helper.cache(
+                    request as ArtifactRequest<ArtifactMetadata.Descriptor>, settings, resolver
+                )
+            }
         }
 
         if (cacheResult.all { it.exceptionOrNull() is ArchiveException.ArchiveNotFound }) {
-            val cause = cacheResult
-                .mapNotNull { it.exceptionOrNull() }
-                .filterIsInstance<ArchiveException.ArchiveNotFound>()
-                .first()
+            val cause =
+                cacheResult.mapNotNull { it.exceptionOrNull() }.filterIsInstance<ArchiveException.ArchiveNotFound>()
+                    .first()
 
             throw PartitionLoadException(
-                partition.name,
-                "a dependency couldn't be located.",
-                cause = cause
+                partition.name, "a dependency couldn't be located.", cause = cause
             ) {
                 extName asContext "Extension name"
                 cause.archive asContext "Raw dependency request" // We want the raw dependency request because there was an issue with every single dependency provider (and we correctly assume that all may have different dependency descriptor types)
@@ -98,24 +93,14 @@ internal fun cachePartitionDependencies(
             }
         }
 
-        val successfulJob = cacheResult.find { cacheResult ->
+        cacheResult.find { cacheResult ->
             cacheResult.isSuccess
-        } ?: throw PartitionLoadException(
+        }?.getOrNull() ?: throw PartitionLoadException(
             partition.name,
             "An unrecoverable error occurred when caching dependencies",
-            cacheResult
-                .mapNotNull { it.exceptionOrNull() }
-                .first { it !is ArchiveException.ArchiveNotFound }
-//            IterableException(
-//                "Dependencies could not be cached",
-//                cacheResult.map { it.exceptionOrNull()!! }
-//            )
-        ) {
+            cacheResult.mapNotNull { it.exceptionOrNull() }.first { it !is ArchiveException.ArchiveNotFound }) {
             dependency asContext "Raw dependency request" // We want the raw dependency request because there was an issue with every single dependency provider (and we correctly assume that all may have different dependency descriptor types)
             requests.map { it.second } asContext "Attempted repositories"
             extName asContext "Extension name"
         }
-
-        successfulJob.merge()
     }
-}

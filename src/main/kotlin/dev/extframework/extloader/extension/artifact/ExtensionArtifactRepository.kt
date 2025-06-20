@@ -4,9 +4,6 @@ import com.durganmcbroom.artifact.resolver.ArtifactRepository
 import com.durganmcbroom.artifact.resolver.MetadataRequestException
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenRepositorySettings
 import com.durganmcbroom.artifact.resolver.simple.maven.layout.ResourceRetrievalException
-import com.durganmcbroom.jobs.JobName
-import com.durganmcbroom.jobs.async.AsyncJob
-import com.durganmcbroom.jobs.async.asyncJob
 import com.durganmcbroom.resources.ResourceAlgorithm
 import com.durganmcbroom.resources.ResourceNotFoundException
 import com.durganmcbroom.resources.toByteArray
@@ -14,16 +11,11 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.fasterxml.jackson.module.kotlin.readValue
-import dev.extframework.boot.dependency.DependencyTypeContainer
 import dev.extframework.extloader.exception.ExtLoaderExceptions
 import dev.extframework.tooling.api.TOOLING_API_VERSION
 import dev.extframework.tooling.api.exception.StructuredException
 import dev.extframework.tooling.api.extension.ExtensionRuntimeModel
-import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactMetadata
-import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactRequest
-import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
-import dev.extframework.tooling.api.extension.artifact.ExtensionParentInfo
-import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
+import dev.extframework.tooling.api.extension.artifact.*
 import dev.extframework.tooling.api.extension.descriptor
 
 public open class ExtensionArtifactRepository(
@@ -34,9 +26,9 @@ public open class ExtensionArtifactRepository(
     private val mapper = ObjectMapper().registerModule(KotlinModule.Builder().build())
     private val layout by settings::layout
 
-    override fun get(
+    override suspend fun get(
         request: ExtensionArtifactRequest
-    ): AsyncJob<ExtensionArtifactMetadata> = asyncJob(JobName("Load extension metadata for: '${request.descriptor}'")) {
+    ): ExtensionArtifactMetadata {
         val (group, artifact, version) = request.descriptor
 
         val (ermOr, ermLocation) = try {
@@ -57,7 +49,7 @@ public open class ExtensionArtifactRepository(
         } catch (e: Exception) {
             throw StructuredException(
                 ExtLoaderExceptions.InvalidErm,
-                message = "Invalid Extension runtime model built for extension: '${request.descriptor}'",
+                description = "Invalid Extension runtime model built for extension: '${request.descriptor}'",
                 cause = e
             ) {
                 TOOLING_API_VERSION asContext "Current API version:"
@@ -68,7 +60,7 @@ public open class ExtensionArtifactRepository(
 
         val children = erm.parents
 
-        ExtensionArtifactMetadata(
+        return ExtensionArtifactMetadata(
             request.descriptor,
             children.map { req1 ->
                 ExtensionParentInfo(
@@ -102,7 +94,7 @@ public open class ExtensionArtifactRepository(
         if (erm.descriptor != descriptor) {
             throw StructuredException(
                 ExtLoaderExceptions.InvalidErm,
-                message = "Descriptor mismatch. The group:name:version in the erm must match the path at which this artifact is located."
+                description = "Descriptor mismatch. The group:name:version in the erm must match the path at which this artifact is located."
             ) {
                 erm.descriptor asContext "ERM descriptor"
             }
@@ -110,7 +102,7 @@ public open class ExtensionArtifactRepository(
         if (erm.apiVersion > TOOLING_API_VERSION) {
             throw StructuredException(
                 ExtLoaderExceptions.InvalidErm,
-                message = "Unsupported API version."
+                description = "Unsupported API version."
             ) {
                 erm.apiVersion asContext "Extension API version"
                 TOOLING_API_VERSION asContext "Current API version"

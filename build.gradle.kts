@@ -1,15 +1,13 @@
 import dev.extframework.gradle.common.*
-import dev.extframework.gradle.common.dm.artifactResolver
-import dev.extframework.gradle.common.dm.jobs
 
 plugins {
     kotlin("jvm") version "2.1.20"
 
-    id("dev.extframework.common") version "1.0.53"
+    id("dev.extframework.common") version "1.1"
 }
 
 group = "dev.extframework"
-version = "2.1.17-SNAPSHOT"
+version = "2.2-SNAPSHOT"
 
 tasks.wrapper {
     gradleVersion = "8.3"
@@ -18,12 +16,9 @@ tasks.wrapper {
 dependencies {
     testImplementation(project(":"))
 
-    jobs(logging = true, progressSimple = true)
-    artifactResolver()
-
-    archives(mixin = true)
-    commonUtil()
-    objectContainer()
+    implementation(archives())
+    implementation(commonUtil())
+    implementation(objectContainer())
 
     implementation(project(":tooling-api"))
 
@@ -140,7 +135,8 @@ allprojects {
     }
 
     dependencies {
-        boot()
+        implementation(artifactResolver())
+        implementation(boot())
         implementation(kotlin("stdlib"))
         implementation(kotlin("reflect"))
         testImplementation(kotlin("test"))
