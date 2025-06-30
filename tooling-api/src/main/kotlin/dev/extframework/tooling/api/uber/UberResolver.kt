@@ -23,7 +23,7 @@ public object UberResolver : ArchiveNodeResolver<
         UberArtifactMetadata> {
     override val factory: UberRepositoryFactory = UberRepositoryFactory
     override val metadataType: Class<UberArtifactMetadata> = UberArtifactMetadata::class.java
-    override val name: String = "uber-loader"
+    override val id: String = "uber-loader"
     override val nodeType: Class<in UberNode> = UberNode::class.java
     override val apiVersion: Int = 1
 

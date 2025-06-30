@@ -18,9 +18,10 @@ public interface ExtensionResolver : ArchiveNodeResolver<
         ExtensionNode,
         ExtensionRepositorySettings,
         ExtensionArtifactMetadata> {
+    public val layerLoader: ClassLoader
     public val partitionResolver: PartitionResolver
 
-    override val name: String
+    override val id: String
         get() = "extension"
 
     override val metadataType: Class<ExtensionArtifactMetadata>

@@ -10,7 +10,6 @@ import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettin
 public data class PartitionDescriptor(
     val extension: ExtensionDescriptor,
     val partition: String,
-    val environment: String
 ) : ArtifactMetadata.Descriptor {
     override val name: String = "${extension.name}:$partition"
 
@@ -36,14 +35,12 @@ public data class PartitionArtifactRequest(
     public constructor(
         extensionReq: ExtensionArtifactRequest,
         partition: String,
-        environment: String
-    ) : this(PartitionDescriptor(extensionReq.descriptor, partition, environment))
+    ) : this(PartitionDescriptor(extensionReq.descriptor, partition))
 
     public constructor(
         extensionDescriptor: ExtensionDescriptor,
         partition: String,
-        environment: String
-    ) : this(PartitionDescriptor(extensionDescriptor, partition, environment))
+    ) : this(PartitionDescriptor(extensionDescriptor, partition))
 }
 
 public typealias PartitionParentInfo = ArtifactMetadata.ParentInfo<PartitionArtifactRequest, ExtensionRepositorySettings>
@@ -53,6 +50,6 @@ public class PartitionArtifactMetadata(
     public val resource: Resource?,
 ) : ArtifactMetadata<PartitionDescriptor, PartitionParentInfo>(desc, listOf())
 
-public fun ExtensionDescriptor.partition(name: String, environment: String): PartitionDescriptor {
-    return PartitionDescriptor(this, name, environment)
+public fun ExtensionDescriptor.partition(name: String): PartitionDescriptor {
+    return PartitionDescriptor(this, name)
 }

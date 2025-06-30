@@ -3,11 +3,11 @@ import dev.extframework.gradle.common.*
 plugins {
     kotlin("jvm") version "2.1.20"
 
-    id("dev.extframework.common") version "1.1"
+    id("dev.extframework.common") version "1.1.1"
 }
 
 group = "dev.extframework"
-version = "2.2-SNAPSHOT"
+version = "2.2.1-SNAPSHOT"
 
 tasks.wrapper {
     gradleVersion = "8.3"
@@ -124,6 +124,7 @@ allprojects {
     repositories {
         mavenCentral()
         extFramework()
+        mavenLocal()
     }
 
     kotlin {

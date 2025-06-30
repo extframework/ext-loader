@@ -32,7 +32,6 @@ public interface PartitionResolver : ArchiveNodeResolver<
             descriptor.requireKeyInDescriptor("version") { trace },
         ),
         descriptor.requireKeyInDescriptor("partition") { trace },
-        descriptor.requireKeyInDescriptor("environment") { trace }
     )
 
     override fun serializeDescriptor(descriptor: PartitionDescriptor): Map<String, String> {
@@ -41,7 +40,6 @@ public interface PartitionResolver : ArchiveNodeResolver<
             "artifact" to descriptor.extension.artifact,
             "version" to descriptor.extension.version,
             "partition" to descriptor.partition,
-            "environment" to descriptor.environment,
         )
     }
 

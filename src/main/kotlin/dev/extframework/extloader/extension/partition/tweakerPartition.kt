@@ -21,7 +21,7 @@ import java.nio.file.Path
 import kotlin.io.path.toPath
 
 public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionMetadata> {
-    override val type: String = TYPE
+    override val id: String = TYPE
 
     public companion object {
         public const val TYPE: String = "tweaker"
@@ -100,7 +100,7 @@ public class TweakerPartitionLoader : ExtensionPartitionLoader<TweakerPartitionM
         val parents = helper.erm.parents
             .mapAsync {
                 try {
-                    helper.cache("tweaker", helper.defaultEnvironment, it)
+                    helper.cache("tweaker", it)
                 } catch (_: ArchiveException.ArchiveNotFound) {
                     // Nothing
                     null

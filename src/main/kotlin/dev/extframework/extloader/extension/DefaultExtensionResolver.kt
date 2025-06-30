@@ -1,8 +1,5 @@
 package dev.extframework.extloader.extension
 
-import com.durganmcbroom.artifact.resolver.Artifact
-import com.durganmcbroom.artifact.resolver.ResolutionContext
-import com.durganmcbroom.artifact.resolver.createContext
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenDescriptor
 import com.durganmcbroom.artifact.resolver.simple.maven.layout.SimpleMavenDefaultLayout
 import com.durganmcbroom.resources.Resource
@@ -14,7 +11,6 @@ import dev.extframework.boot.archive.*
 import dev.extframework.boot.audit.Auditors
 import dev.extframework.boot.constraint.registerConstraintNegotiator
 import dev.extframework.boot.monad.Either
-import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
 import dev.extframework.boot.util.basicObjectMapper
 import dev.extframework.boot.util.mapAsync
@@ -22,13 +18,12 @@ import dev.extframework.extloader.extension.artifact.ExtensionArtifactRepository
 import dev.extframework.extloader.extension.artifact.ExtensionRepositoryFactory
 import dev.extframework.extloader.extension.partition.DefaultPartitionResolver
 import dev.extframework.tooling.api.TOOLING_API_VERSION
-import dev.extframework.tooling.api.environment.EnvironmentRegistry
+import dev.extframework.tooling.api.environment.ExtensionEnvironment
 import dev.extframework.tooling.api.extension.ExtensionClassLoader
 import dev.extframework.tooling.api.extension.ExtensionNode
 import dev.extframework.tooling.api.extension.ExtensionResolver
 import dev.extframework.tooling.api.extension.ExtensionRuntimeModel
 import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactMetadata
-import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactRequest
 import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
 import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
 import dev.extframework.tooling.api.extension.partition.PartitionResolver
@@ -38,23 +33,22 @@ import java.nio.file.Files
 
 public open class DefaultExtensionResolver(
     parent: ClassLoader,
-    environmentRegistry: EnvironmentRegistry,
-    defaultEnvironment: String
+    environment: ExtensionEnvironment
 ) : ExtensionResolver, RegisterAuditor {
-    private val layerLoader = ExtensionLayerClassLoader(parent)
+    override val layerLoader: ExtensionLayerClassLoader = ExtensionLayerClassLoader(parent)
     override val factory: ExtensionRepositoryFactory = ExtensionRepositoryFactory()
 
     private val mapper = ObjectMapper().registerModule(KotlinModule.Builder().build())
 
-    private data class ExtensionMetadata(
+    protected data class ExtensionMetadata(
         val erm: ExtensionRuntimeModel,
         val repository: ExtensionRepositorySettings,
     )
 
     // TODO determine if it is necessary for these keys to be strings instead of ExtensionDescriptors
     //   (and then additionally match on version)
-    private val extensionMetadata: MutableMap<String, ExtensionMetadata> = HashMap()
-    private val extensionClassloaders: MutableMap<String, ExtensionClassLoader> = HashMap()
+    protected val extensionMetadata: MutableMap<String, ExtensionMetadata> = HashMap()
+    protected val extensionClassloaders: MutableMap<String, ExtensionClassLoader> = HashMap()
 
     override val apiVersion: Int = TOOLING_API_VERSION
 
@@ -81,7 +75,8 @@ public open class DefaultExtensionResolver(
         }
     }
     override val partitionResolver: PartitionResolver = DefaultPartitionResolver(
-        accessBridge, environmentRegistry, defaultEnvironment
+        accessBridge,
+        environment
     )
 
     override fun register(auditors: Auditors): Auditors {
@@ -195,7 +190,7 @@ public open class DefaultExtensionResolver(
         }
     }
 
-    private fun ExtensionDescriptor.toIdentifier(): String {
+    protected fun ExtensionDescriptor.toIdentifier(): String {
         return "$group:$artifact"
     }
 }

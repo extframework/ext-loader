@@ -1,12 +1,11 @@
 package dev.extframework.extloader
 
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenDescriptor
-import com.durganmcbroom.jobs.Job
-import com.durganmcbroom.jobs.job
 import dev.extframework.boot.archive.ArchiveGraph
 import dev.extframework.boot.archive.ArchiveTreeAuditContext
 import dev.extframework.boot.archive.ArchiveTreeAuditor
 import dev.extframework.boot.archive.DefaultArchiveGraph
+import dev.extframework.boot.dependency.DependencyResolverProvider
 import dev.extframework.boot.dependency.DependencyTypeContainer
 import dev.extframework.boot.maven.MavenConstraintNegotiator
 import dev.extframework.boot.maven.MavenDependencyResolver
@@ -16,31 +15,32 @@ import dev.extframework.common.util.readInputStream
 import dev.extframework.extloader.extension.DefaultExtensionResolver
 import dev.extframework.`object`.ObjectContainerImpl
 import dev.extframework.tooling.api.ExtensionLoader
-import dev.extframework.tooling.api.environment.EnvironmentRegistry
-import dev.extframework.tooling.api.environment.ExtensionEnvironment
+import dev.extframework.tooling.api.environment.*
 import java.nio.file.Path
 import kotlin.io.path.Path
 
 fun newLoader(): Pair<ExtensionLoader, ExtensionEnvironment> {
     val path = Path("tests/cache")
     val (graph, types) = setupBoot(path)
-    val environment = RootExtensionEnvironment(
+    val environment = DefaultExtensionEnvironment(
         "root",
-        path,
-        types
+//        path,
+//        types
     )
 
-    val registry : EnvironmentRegistry = ObjectContainerImpl()
+    environment += ValueAttribute(wrkDirAttrKey, path)
+    environment += ObjectContainerAttribute(dependencyTypesAttrKey, types)
+
+//    val registry : EnvironmentRegistry = ObjectContainerImpl()
 
     val loader = DefaultExtensionLoader(
         DefaultExtensionResolver(
             ClassLoader.getSystemClassLoader(),
-            registry,
-            "root"
+            environment
         ),
         graph,
-        environment,
-        registry
+//        environment,
+//        registry
     )
 
     return Pair(loader, environment)
@@ -66,8 +66,8 @@ fun setupBoot(path: Path): Pair<ArchiveGraph, DependencyTypeContainer> {
     }
 
     archiveGraph.auditors = archiveGraph.auditors.chain(object : ArchiveTreeAuditor {
-        override fun audit(event: ArchiveTreeAuditContext): Job<ArchiveTreeAuditContext> = job {
-            event.copy(tree = event.tree.removeIf {
+        override fun audit(event: ArchiveTreeAuditContext): ArchiveTreeAuditContext {
+            return event.copy(tree = event.tree.removeIf {
                 alreadyLoaded.contains(
                     negotiator.classify(
                         it.value.descriptor as? SimpleMavenDescriptor ?: return@removeIf false
@@ -81,9 +81,9 @@ fun setupBoot(path: Path): Pair<ArchiveGraph, DependencyTypeContainer> {
         parentClassLoader = This::class.java.classLoader,
     )
 
-    archiveGraph.registerResolver(maven)
+    archiveGraph.resolvers.register(maven)
 
-    return archiveGraph to DependencyTypeContainer(archiveGraph).apply {
-        register("simple-maven", MavenResolverProvider(resolver = maven))
+    return archiveGraph to ObjectContainerImpl<DependencyResolverProvider<*, *, *>>().apply {
+        register (MavenResolverProvider(resolver = maven))
     }
 }

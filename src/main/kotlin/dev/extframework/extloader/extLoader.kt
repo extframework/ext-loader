@@ -1,6 +1,5 @@
 package dev.extframework.extloader
 
-import com.durganmcbroom.artifact.resolver.ArtifactMetadata
 import com.fasterxml.jackson.module.kotlin.readValue
 import dev.extframework.boot.archive.*
 import dev.extframework.boot.monad.Tree
@@ -12,31 +11,25 @@ import dev.extframework.extloader.exception.ExtLoaderExceptions
 import dev.extframework.extloader.extension.ExtensionLoadException
 import dev.extframework.extloader.extension.partition.TweakerPartitionNode
 import dev.extframework.tooling.api.ExtensionLoader
-import dev.extframework.tooling.api.environment.EnvironmentRegistry
 import dev.extframework.tooling.api.environment.ExtensionEnvironment
 import dev.extframework.tooling.api.exception.StructuredException
-import dev.extframework.tooling.api.extension.*
+import dev.extframework.tooling.api.extension.ExtensionNode
+import dev.extframework.tooling.api.extension.ExtensionResolver
+import dev.extframework.tooling.api.extension.ExtensionRuntimeModel
 import dev.extframework.tooling.api.extension.artifact.ExtensionArtifactRequest
 import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
 import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
 import dev.extframework.tooling.api.extension.partition.ExtensionPartitionContainer
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifactRequest
-import dev.extframework.tooling.api.extension.partition.artifact.PartitionDescriptor
 import dev.extframework.tooling.api.uber.*
 import java.nio.file.Files
 
 public open class DefaultExtensionLoader(
     override val extensionResolver: ExtensionResolver,
     override val graph: ArchiveGraph,
-    override val rootEnvironment: ExtensionEnvironment,
-    override val environmentRegistry: EnvironmentRegistry,
-) : ExtensionLoader {
-    private val loaded: MutableList<ExtensionNode> = ArrayList()
 
-    init {
-        checkRegistration(rootEnvironment)
-        rootEnvironment += this
-    }
+    ) : ExtensionLoader {
+    protected open val loaded: MutableList<ExtensionNode> = ArrayList()
 
     override suspend fun cache(
         requests: Map<ExtensionDescriptor, ExtensionRepositorySettings>,
@@ -139,16 +132,20 @@ public open class DefaultExtensionLoader(
             possibleSupers.first()
         }
 
-        val extensions = graph.get(
+        val tree = graph.get(
             descriptor,
             UberResolver
         )
+
+        val extensions = tree
             .buildTree()
             .toList()
+            .filterDuplicates()
             .filterIsInstance<ExtensionNode>()
 
-        loaded.clear()
-        loaded.addAll(extensions)
+        loaded.addAll(extensions.filterNot {
+            loaded.any { n -> n.descriptor == it.descriptor }
+        })
 
         return extensions
     }
@@ -157,7 +154,7 @@ public open class DefaultExtensionLoader(
         extensions: List<ExtensionNode>,
         environment: ExtensionEnvironment
     ) {
-        checkRegistration(environment)
+//        checkRegistration(environment)
 
         val uberTweakerParents = extensions
             .filter { archive ->
@@ -169,7 +166,6 @@ public open class DefaultExtensionLoader(
                     PartitionArtifactRequest(
                         archive.descriptor,
                         "tweaker",
-                        rootEnvironment.name
                     ),
                     extensionResolver.accessBridge.repositoryFor(archive.descriptor),
                     extensionResolver.partitionResolver
@@ -201,8 +197,6 @@ public open class DefaultExtensionLoader(
                     .filterIsInstance<ExtensionPartitionContainer<TweakerPartitionNode, *>>()
                     .find { container -> container.descriptor.extension == archive.descriptor }
             }
-            .reversed()
-            .filterDuplicates()
 
         val tweaked: MutableSet<ExtensionDescriptor> = HashSet()
 
@@ -297,54 +291,54 @@ public open class DefaultExtensionLoader(
 //        }
 //    }
 
-    private suspend fun buildUnloadableUberChild(
-        child: ArtifactMetadata.Descriptor,
-        unloadable: (ArchiveNode<*>) -> Boolean = { true },
-        requestBuilder: (ArtifactMetadata.Descriptor) -> UberParentRequest<*, *, *>?
-    ): UberDescriptor? {
-        val uber = UberResolver.by[child] ?: return null
-
-        val targets = (graph.getNode(uber) ?: return null)
-            .access
-            .targets
-            .map { it.relationship }
-
-        val toKeep = targets
-            .filterIsInstance<ArchiveRelationship.Direct>()
-            .map { it.node.descriptor }
-            .toMutableSet()
-            .apply { remove(child) }
-            .apply {
-                targets
-                    .map { it.node }
-                    .filter { !unloadable(it) }
-                    .forEach { add(it.descriptor) }
-            }
-
-        if (!toKeep.isEmpty()) {
-            toKeep.forEach {
-                UberResolver.by.remove(it)
-            }
-
-            val descriptor = UberDescriptor("${uber.name} unloading delta")
-
-            graph.cache(
-                UberArtifactRequest(
-                    descriptor,
-                    toKeep.mapNotNull { requestBuilder(it) }
-                ),
-                UberRepositorySettings,
-                UberResolver
-            )
-
-            graph.get(
-                descriptor,
-                UberResolver
-            )
-        }
-
-        return uber
-    }
+//    private suspend fun buildUnloadableUberChild(
+//        child: ArtifactMetadata.Descriptor,
+//        unloadable: (ArchiveNode<*>) -> Boolean = { true },
+//        requestBuilder: (ArtifactMetadata.Descriptor) -> UberParentRequest<*, *, *>?
+//    ): UberDescriptor? {
+//        val uber = UberResolver.by[child] ?: return null
+//
+//        val targets = (graph.getNode(uber) ?: return null)
+//            .access
+//            .targets
+//            .map { it.relationship }
+//
+//        val toKeep = targets
+//            .filterIsInstance<ArchiveRelationship.Direct>()
+//            .map { it.node.descriptor }
+//            .toMutableSet()
+//            .apply { remove(child) }
+//            .apply {
+//                targets
+//                    .map { it.node }
+//                    .filter { !unloadable(it) }
+//                    .forEach { add(it.descriptor) }
+//            }
+//
+//        if (!toKeep.isEmpty()) {
+//            toKeep.forEach {
+//                UberResolver.by.remove(it)
+//            }
+//
+//            val descriptor = UberDescriptor("${uber.name} unloading delta")
+//
+//            graph.cache(
+//                UberArtifactRequest(
+//                    descriptor,
+//                    toKeep.mapNotNull { requestBuilder(it) }
+//                ),
+//                UberRepositorySettings,
+//                UberResolver
+//            )
+//
+//            graph.get(
+//                descriptor,
+//                UberResolver
+//            )
+//        }
+//
+//        return uber
+//    }
 
     private fun ArchiveNode<*>.buildTree(): Tree<ArchiveNode<*>> {
         val parents = access.targets
@@ -359,11 +353,31 @@ public open class DefaultExtensionLoader(
         )
     }
 
-    protected fun checkRegistration(
-        environment: ExtensionEnvironment,
+//    protected fun checkRegistration(
+//        environment: ExtensionEnvironment,
+//    ) {
+//        if (!environmentRegistry.has(environment.id)) {
+//            environmentRegistry.register(environment.id, environment)
+//        }
+//    }
+
+    override fun compose(
+        into: ExtensionEnvironment
+    ): ExtensionEnvironment.Attribute.View<*> {
+        return View(this, into)
+    }
+
+    private class View(
+        override var reference: ExtensionLoader,
+        environment: ExtensionEnvironment
+    ) : ExtensionEnvironment.Attribute.View<ExtensionLoader>, DefaultExtensionLoader(
+        ExtensionResolverView(
+            { reference.extensionResolver },
+            environment
+        ),
+        ArchiveGraphView { reference.graph }
     ) {
-        if (!environmentRegistry.has(environment.name)) {
-            environmentRegistry.register(environment.name, environment)
-        }
+        override var isValid: Boolean = true
+        override val key: ExtensionEnvironment.Attribute.Key<*> = ExtensionLoader
     }
 }

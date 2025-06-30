@@ -2,7 +2,6 @@ package dev.extframework.tooling.api
 
 import dev.extframework.boot.archive.ArchiveGraph
 import dev.extframework.boot.monad.Tree
-import dev.extframework.tooling.api.environment.EnvironmentRegistry
 import dev.extframework.tooling.api.environment.ExtensionEnvironment
 import dev.extframework.tooling.api.extension.ExtensionNode
 import dev.extframework.tooling.api.extension.ExtensionResolver
@@ -12,13 +11,9 @@ import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettin
 
 public interface ExtensionLoader : ExtensionEnvironment.Attribute {
     public val extensionResolver: ExtensionResolver
-//    public val partitionResolver: PartitionResolver
     public val graph: ArchiveGraph
-    public val environmentRegistry: EnvironmentRegistry
-//    public val environment: ExtensionEnvironment
-//    public val parent: ExtensionLoader?
-//    public val loaded: List<ExtensionNode>
-    public val rootEnvironment : ExtensionEnvironment
+//    public val environmentRegistry: EnvironmentRegistry
+//    public val rootEnvironment : ExtensionEnvironment
 
     override val key: ExtensionEnvironment.Attribute.Key<*>
         get() = ExtensionLoader

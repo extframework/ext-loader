@@ -1,6 +1,10 @@
 package dev.extframework.extloader.extension.partition
 
-import com.durganmcbroom.artifact.resolver.*
+import com.durganmcbroom.artifact.resolver.ArtifactMetadata
+import com.durganmcbroom.artifact.resolver.ArtifactRepository
+import com.durganmcbroom.artifact.resolver.ArtifactRequest
+import com.durganmcbroom.artifact.resolver.RepositoryFactory
+import com.durganmcbroom.artifact.resolver.RepositorySettings
 import com.durganmcbroom.artifact.resolver.simple.maven.SimpleMavenDescriptor
 import com.durganmcbroom.resources.Resource
 import dev.extframework.archives.ArchiveReference
@@ -15,13 +19,12 @@ import dev.extframework.boot.monad.Tree
 import dev.extframework.common.util.filterDuplicates
 import dev.extframework.extloader.extension.ExtensionConstraintNegotiator
 import dev.extframework.extloader.extension.ExtensionLoadException
+import dev.extframework.extloader.extension.partition.artifact.PartitionArtifactRepository
 import dev.extframework.extloader.extension.partition.artifact.PartitionRepositoryFactory
 import dev.extframework.tooling.api.TOOLING_API_VERSION
-import dev.extframework.tooling.api.environment.EnvironmentRegistry
+import dev.extframework.tooling.api.environment.ExtensionEnvironment
 import dev.extframework.tooling.api.environment.dependencyTypesAttrKey
 import dev.extframework.tooling.api.environment.partitionLoadersAttrKey
-import dev.extframework.tooling.api.exception.InternalExceptions
-import dev.extframework.tooling.api.exception.StructuredException
 import dev.extframework.tooling.api.extension.*
 import dev.extframework.tooling.api.extension.artifact.ExtensionDescriptor
 import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettings
@@ -30,15 +33,15 @@ import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifa
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionArtifactRequest
 import dev.extframework.tooling.api.extension.partition.artifact.PartitionDescriptor
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.coroutineScope
 
 public open class DefaultPartitionResolver(
     private val bridge: ExtensionResolver.AccessBridge,
-    private val environmentRegistry: EnvironmentRegistry,
-    private val defaultEnvironment: String
+    private val environment: ExtensionEnvironment,
 ) : PartitionResolver, RegisterAuditor {
-    override val factory: PartitionRepositoryFactory = PartitionRepositoryFactory { p, settings ->
+    override val factory: RepositoryFactory<ExtensionRepositorySettings, ArtifactRepository<ExtensionRepositorySettings, PartitionArtifactRequest, PartitionArtifactMetadata>> = PartitionRepositoryFactory { p, settings ->
         bridge.ermFor(p.extension).partitions.find {
             it.name == p.partition
         }?.takeIf { bridge.repositoryFor(p.extension) == settings }
@@ -46,9 +49,7 @@ public open class DefaultPartitionResolver(
 
     override val apiVersion: Int = TOOLING_API_VERSION
 
-    //    override val context: ResolutionContext<ExtensionRepositorySettings, PartitionArtifactRequest, PartitionArtifactMetadata>
-//        get() = factory.createContext()
-    override val name: String
+    override val id: String
         get() = "extension-partition"
 
     override fun register(auditors: Auditors): Auditors {
@@ -68,27 +69,15 @@ public open class DefaultPartitionResolver(
         )
     }
 
-    protected fun unknownEnvironment(
-        env: String
-    ): Nothing = throw StructuredException(
-        InternalExceptions.UnknownEnvironmentException,
-        description = "Unknown environment $env"
-    ) {
-        solution("Please registry this environment with the EnvironmentRegistry.")
-        environmentRegistry.objects().keys asContext "Registered environments"
-    }
-
     protected fun getLoader(
         prm: PartitionRuntimeModel,
-        env: String
     ): ExtensionPartitionLoader<ExtensionPartitionMetadata> {
-        val environment = environmentRegistry.get(env) ?: unknownEnvironment(env)
-        val partitionLoaders = environment[partitionLoadersAttrKey]?.container
+        val partitionLoaders = environment[partitionLoadersAttrKey].container
 
-        return (partitionLoaders?.get(prm.type) as? ExtensionPartitionLoader<ExtensionPartitionMetadata>)
+        return (partitionLoaders[prm.type] as? ExtensionPartitionLoader<ExtensionPartitionMetadata>)
             ?: throw IllegalArgumentException(
                 "Illegal partition type: '${prm.type}', only accepted ones are: '${
-                    partitionLoaders?.objects()?.map(
+                    partitionLoaders?.map(
                         Map.Entry<String, ExtensionPartitionLoader<*>>::key
                     ) ?: listOf()
                 }'"
@@ -122,7 +111,7 @@ public open class DefaultPartitionResolver(
         // Should never be null if getting to this stage.
         val prm = erm.partitions.find { it.name == data.descriptor.partition }!!
 
-        val loader = getLoader(prm, data.descriptor.environment)
+        val loader = getLoader(prm)
         val metadata = parseMetadata(loader, erm.partitions.find {
             it.name == prm.name
         } ?: throw PartitionLoadException(prm.name, "Partition not defined in the erm!") {
@@ -172,7 +161,7 @@ public open class DefaultPartitionResolver(
         metadata: PartitionArtifactMetadata,
         parents: List<Tree<Either<PartitionArtifactMetadata, TaggedIArchive>>>,
         helper: CacheHelper<PartitionDescriptor>
-    ): Tree<TaggedIArchive> {
+    ): Tree<TaggedIArchive> = coroutineScope {
         val descriptor = metadata.descriptor
         val erm = bridge.ermFor(descriptor.extension)
         val prm = erm.namedPartitions[descriptor.partition]
@@ -182,21 +171,19 @@ public open class DefaultPartitionResolver(
             ) {
                 erm.descriptor asContext "Extension name"
             }
-        val loader = getLoader(prm, descriptor.environment)
-        val environment = environmentRegistry.get(descriptor.environment)
-            ?: unknownEnvironment(descriptor.environment)
+        val loader = getLoader(prm)
         val dependencyTypes = environment[dependencyTypesAttrKey].container
 
         helper.withResource("partition.jar", metadata.resource)
 
-        val dependencies = cachePartitionDependencies(
+        val dependencies = async { cachePartitionDependencies(
             prm,
             descriptor.extension.artifact,
             dependencyTypes,
             helper
-        )
+        ).awaitAll() }
 
-        return loader.cache(
+        loader.cache(
             metadata,
             parents,
             DefaultPartitionCacheHelper(
@@ -205,25 +192,25 @@ public open class DefaultPartitionResolver(
         )
     }
 
-    private inner class DefaultPartitionCacheHelper(
+    protected inner class DefaultPartitionCacheHelper(
         override val erm: ExtensionRuntimeModel,
         override val prm: PartitionRuntimeModel,
         private val helper: CacheHelper<PartitionDescriptor>,
         private val descriptor: PartitionDescriptor,
-        private val dependencies: List<Deferred<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>>
+        private val dependencies: Deferred<List<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>>
     ) : PartitionCacheHelper {
-        override val defaultEnvironment: String = this@DefaultPartitionResolver.defaultEnvironment
+//        override val defaultEnvironment: String = this@DefaultPartitionResolver.defaultEnvironment
 
         override suspend fun cache(
-            reference: String,
-            environment: String
+            partition: String,
+//            environment: String
         ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>> {
             return cache(
                 PartitionArtifactRequest(
                     PartitionDescriptor(
                         descriptor.extension,
-                        reference,
-                        environment
+                        partition,
+//                        environment
                     )
                 ),
                 bridge.repositoryFor(descriptor.extension),
@@ -233,7 +220,7 @@ public open class DefaultPartitionResolver(
 
         override suspend fun cache(
             partition: String,
-            environment: String,
+//            environment: String,
             parent: ExtensionParent
         ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>> {
             return cache(
@@ -241,7 +228,7 @@ public open class DefaultPartitionResolver(
                     PartitionDescriptor(
                         parent.toDescriptor(),
                         partition,
-                        environment
+//                        environment
                     )
                 ),
                 bridge.repositoryFor(parent.toDescriptor()),
@@ -267,15 +254,13 @@ public open class DefaultPartitionResolver(
             return helper.cache(artifact, resolver)
         }
 
-        override fun newData(
+        override suspend fun newData(
             descriptor: PartitionDescriptor,
             parents: List<Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>>
         ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>> {
-            return runBlocking { // Decide if it is needed to await for dependencies here or if the await should be moved to the initializer.
-                val fullParents = (parents + dependencies.awaitAll()).filterDuplicates()
+            val fullParents = (parents + dependencies.await()).filterDuplicates()
 
-                helper.newData(descriptor, fullParents)
-            }
+            return helper.newData(descriptor, fullParents)
         }
 
         override fun withResource(name: String, resource: Resource) {

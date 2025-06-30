@@ -3,7 +3,7 @@ import dev.extframework.gradle.common.extFramework
 import dev.extframework.gradle.common.objectContainer
 
 group = "dev.extframework"
-version = "1.1-SNAPSHOT"
+version = "1.1.1-SNAPSHOT"
 
 dependencies {
     implementation(objectContainer())

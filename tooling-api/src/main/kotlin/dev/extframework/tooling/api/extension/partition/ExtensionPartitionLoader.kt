@@ -1,12 +1,12 @@
 package dev.extframework.tooling.api.extension.partition
 
-import com.durganmcbroom.artifact.resolver.Artifact
 import dev.extframework.archives.ArchiveHandle
 import dev.extframework.archives.ArchiveReference
 import dev.extframework.boot.archive.*
 import dev.extframework.boot.monad.Either
 import dev.extframework.boot.monad.Tagged
 import dev.extframework.boot.monad.Tree
+import dev.extframework.`object`.ObjectContainer
 import dev.extframework.tooling.api.extension.ExtensionParent
 import dev.extframework.tooling.api.extension.ExtensionRuntimeModel
 import dev.extframework.tooling.api.extension.PartitionRuntimeModel
@@ -46,7 +46,7 @@ public interface PartitionCacheHelper : CacheHelper<PartitionDescriptor> {
     //    public val parents: Map<ExtensionParent, ExtensionArtifactMetadata>
     public val erm: ExtensionRuntimeModel
     public val prm: PartitionRuntimeModel
-    public val defaultEnvironment: String
+//    public val defaultEnvironment: String
 
 //    public fun newPartition(
 //        partition: PartitionRuntimeModel,
@@ -54,12 +54,12 @@ public interface PartitionCacheHelper : CacheHelper<PartitionDescriptor> {
 
     public suspend fun cache(
         partition: String,
-        environment: String
+//        environment: String
     ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>
 
     public suspend fun cache(
         partition: String,
-        environment: String,
+//        environment: String,
         parent: ExtensionParent,
     ): Tree<Tagged<IArchive<*>, ArchiveNodeResolver<*, *, *, *, *>>>
 }
@@ -67,8 +67,8 @@ public interface PartitionCacheHelper : CacheHelper<PartitionDescriptor> {
 //public val PartitionCacheHelper.currentEnvironment: String
 //    get() =
 
-public interface ExtensionPartitionLoader<T : ExtensionPartitionMetadata> {
-    public val type: String
+public interface ExtensionPartitionLoader<T : ExtensionPartitionMetadata>: ObjectContainer.IDed {
+    override val id: String
 
     public fun parseMetadata(
         partition: PartitionRuntimeModel,

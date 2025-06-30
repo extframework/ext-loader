@@ -1,8 +1,5 @@
 package dev.extframework.tooling.api.environment
 
-// TODO redo environment composition: the issue is that mutable attributes,
-//   such as the partition loaders attr, can be mutated in the root environment
-//   either way.
 public interface ExtensionEnvironment {
     public val parent: ExtensionEnvironment?
     public val name: String
@@ -23,20 +20,25 @@ public interface ExtensionEnvironment {
 
     public fun contains(key: Attribute.Key<*>): Boolean
 
-
     public fun remove(key: Attribute.Key<*>)
 
-    public fun compose(name: String) : ExtensionEnvironment
+    public fun compose(id: String) : ExtensionEnvironment
 
     public interface Attribute {
         public val key: Key<*>
 
-        // name = environment name
-        public fun compose(): Attribute? {
+        public fun compose(
+            into: ExtensionEnvironment,
+        ): View<*>? {
             return null
         }
 
         public interface Key<T : Attribute>
+
+        public interface View<T : Attribute> : Attribute {
+            public var isValid: Boolean
+            public var reference: T
+        }
     }
 }
 

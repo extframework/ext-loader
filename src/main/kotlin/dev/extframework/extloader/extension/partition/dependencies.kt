@@ -49,7 +49,7 @@ internal suspend fun cachePartitionDependencies(
             ) {
                 extName asContext "Extension name"
                 settings.settings asContext "Repository settings"
-                provider.name asContext "Dependency resolution provider"
+                provider.id asContext "Dependency resolution provider"
             }
 
             Triple(depReq, repoSettings, provider)
