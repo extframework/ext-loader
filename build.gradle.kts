@@ -7,10 +7,14 @@ plugins {
 }
 
 group = "dev.extframework"
-version = "2.2.1-SNAPSHOT"
+version = "2.2.2-SNAPSHOT"
 
 tasks.wrapper {
     gradleVersion = "8.3"
+}
+
+dependencyManagement {
+    boot("3.7.2-SNAPSHOT")
 }
 
 dependencies {
@@ -38,7 +42,6 @@ common {
         }
     }
 }
-
 
 abstract class ListAllDependencies : DefaultTask() {
     @get:OutputFile

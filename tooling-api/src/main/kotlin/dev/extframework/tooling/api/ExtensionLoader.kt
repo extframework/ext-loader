@@ -12,8 +12,7 @@ import dev.extframework.tooling.api.extension.artifact.ExtensionRepositorySettin
 public interface ExtensionLoader : ExtensionEnvironment.Attribute {
     public val extensionResolver: ExtensionResolver
     public val graph: ArchiveGraph
-//    public val environmentRegistry: EnvironmentRegistry
-//    public val rootEnvironment : ExtensionEnvironment
+    public val environment: ExtensionEnvironment
 
     override val key: ExtensionEnvironment.Attribute.Key<*>
         get() = ExtensionLoader
@@ -32,14 +31,12 @@ public interface ExtensionLoader : ExtensionEnvironment.Attribute {
     // Environment DEPENDENT operations
     public suspend fun tweak(
         extensions: List<ExtensionNode>,
-        environment: ExtensionEnvironment
     )
 
 //    // TODO serious thought
-//    public suspend fun unload(
-//        descriptor: ExtensionDescriptor,
-//
-//    )
+    public suspend fun unload(
+        descriptor: ExtensionDescriptor,
+    )
 
     public data class ExtensionData(
         val descriptor: ExtensionDescriptor,

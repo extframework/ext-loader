@@ -91,15 +91,19 @@ public open class DefaultPartitionResolver(
         prm: PartitionRuntimeModel,
         erm: ExtensionRuntimeModel,
         archive: ArchiveReference?
-    ): ExtensionPartitionMetadata = parsedMetadata[erm.descriptor to (prm.name)] ?: loader.parseMetadata(
+    ): ExtensionPartitionMetadata =
+//        parsedMetadata[erm.descriptor to (prm.name)] ?:
+
+    loader.parseMetadata(
         prm,
         archive,
         object : PartitionMetadataHelper {
             override val erm: ExtensionRuntimeModel = erm
         }
-    ).also {
-        parsedMetadata[erm.descriptor to (prm.name)] = it
-    }
+    )
+//        .also {
+//        parsedMetadata[erm.descriptor to (prm.name)] = it
+//    }
 
     override fun load(
         data: ArchiveData<PartitionDescriptor, CachedArchiveResource>,

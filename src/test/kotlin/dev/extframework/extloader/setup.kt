@@ -12,7 +12,9 @@ import dev.extframework.boot.maven.MavenDependencyResolver
 import dev.extframework.boot.maven.MavenResolverProvider
 import dev.extframework.boot.monad.removeIf
 import dev.extframework.common.util.readInputStream
+import dev.extframework.extloader.environment.registerLoaders
 import dev.extframework.extloader.extension.DefaultExtensionResolver
+import dev.extframework.extloader.extension.partition.TweakerPartitionLoader
 import dev.extframework.`object`.ObjectContainerImpl
 import dev.extframework.tooling.api.ExtensionLoader
 import dev.extframework.tooling.api.environment.*
@@ -30,6 +32,8 @@ fun newLoader(): Pair<ExtensionLoader, ExtensionEnvironment> {
 
     environment += ValueAttribute(wrkDirAttrKey, path)
     environment += ObjectContainerAttribute(dependencyTypesAttrKey, types)
+    environment += ObjectContainerAttribute(partitionLoadersAttrKey)
+    environment[partitionLoadersAttrKey].registerLoaders()
 
 //    val registry : EnvironmentRegistry = ObjectContainerImpl()
 
@@ -39,7 +43,7 @@ fun newLoader(): Pair<ExtensionLoader, ExtensionEnvironment> {
             environment
         ),
         graph,
-//        environment,
+        environment,
 //        registry
     )
 
