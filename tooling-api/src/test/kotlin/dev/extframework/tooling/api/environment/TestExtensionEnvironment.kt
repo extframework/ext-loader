@@ -1,6 +1,6 @@
-//package dev.extframework.tooling.api.environment
+//package com.kaolinmc.tooling.api.environment
 //
-//import dev.extframework.extloader.RootExtensionEnvironment
+//import com.kaolinmc.extloader.RootExtensionEnvironment
 //import kotlin.test.Test
 //
 //class TestExtensionEnvironment {

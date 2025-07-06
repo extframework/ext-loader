@@ -1,13 +1,12 @@
-import dev.extframework.gradle.common.archives
-import dev.extframework.gradle.common.objectContainer
+import com.kaolinmc.gradle.common.*
 
-group = "dev.extframework.test"
+group = "com.kaolinmc.test"
 
 version = "1.0"
 
 dependencies {
-    objectContainer()
-    archives()
+    implementation(objectContainer())
+    implementation(archives())
     implementation(project(":tooling-api"))
 }
 

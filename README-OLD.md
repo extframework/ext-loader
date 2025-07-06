@@ -37,7 +37,7 @@ pluginManagement {
     repositories {
         maven {
             isAllowInsecureProtocol = true
-            url = uri("https://maven.extframework.dev/snapshots")
+            url = uri("https://maven.kaolinmc.com/snapshots")
         }
         gradlePluginPortal()
     }
@@ -50,17 +50,17 @@ plugins {
     // ...
     
     id("maven-publish")
-    id("dev.extframework") version "1.0.1"
+    id("com.kaolinmc") version "1.0.1"
     /* kotlin("kapt") version "1.8.10" - IF USING KOTLIN */ 
 }
 ```
 
-Add the extframework repo to your build.gradle file:
+Add the kaolin repo to your build.gradle file:
 ```kotlin
 repositories {
     mavenCentral()
     maven {
-        url = uri("https://maven.extframework.dev/snapshots")
+        url = uri("https://maven.kaolinmc.com/snapshots")
     }
 }
 ```
@@ -92,9 +92,9 @@ yakclient {
         create("main") {
             dependencies {
                 minecraft("1.19.2")
-                /* annotationProcessor("dev.extframework:yakclient-preprocessor:1.0-SNAPSHOT") - IF USING JAVA */
+                /* annotationProcessor("com.kaolinmc:yakclient-preprocessor:1.0-SNAPSHOT") - IF USING JAVA */
                 
-                /* "kapt"("dev.extframework:yakclient-preprocessor:1.0-SNAPSHOT") - IF USING KOTLIN */
+                /* "kapt"("com.kaolinmc:yakclient-preprocessor:1.0-SNAPSHOT") - IF USING KOTLIN */
                 /* implementation("org.jetbrains.kotlin:kotlin-stdlib:1.8.10") - IF USING KOTLIN */
             }
         }
@@ -122,8 +122,8 @@ For a complete example of the gradle build file with yakclient, see [example-ext
 ## Your first extension
 
 Now that you have setup gradle, you can create your extension entrypoint! This will be the class that receives update
-on-start and on-end. A good name for an extension may be as follows: `dev.extframework.extensions.example.ExampleExtension`.
-Next, implement the `dev.extframework.client.api.Extension` abstract class. For now, you can leave the `cleanup()` method
+on-start and on-end. A good name for an extension may be as follows: `com.kaolinmc.extensions.example.ExampleExtension`.
+Next, implement the `com.kaolinmc.client.api.Extension` abstract class. For now, you can leave the `cleanup()` method
 blank, and under the `init()` method you can add a println. 
 
 Kotlin:
@@ -153,7 +153,7 @@ modify any source files. Lets look at how this works in YakClient.
 ## Defining a Mixin
 
 To define a mixin targeting a specific Minecraft Class, Annotate your abstract mixin class with
-[`@dev.extframework.client.api.annotation.Mixin`](/client-api/src/main/java/net/yakclient/client/api/annotation/Mixin.java).
+[`@com.kaolinmc.client.api.annotation.Mixin`](/client-api/src/main/java/net/yakclient/client/api/annotation/Mixin.java).
 For example: 
 ```kotlin
 @Mixin("a.minecraft.Class")
@@ -169,7 +169,7 @@ in Minecraft. The following is how you define this (API SUBJECT TO CHANGE).
 
 @SourceInjection(
     point = BEFORE_END,
-    from = "dev.extframework.extensions.example.MyFirstMixin",
+    from = "com.kaolinmc.extensions.example.MyFirstMixin",
     to = "net.minecraft.client.main.Main", // Some minecraft class
     methodFrom = "anExample()V", // Important, this must be a valid java methodName + java method Descriptor
     methodTo = "main([java/lang/String)V", // Same as above, this time targeting the minecraft method
@@ -200,7 +200,7 @@ To define a method extension, do the following:
 ```kotlin
 // Your mixin class here
 @MethodInjection(
-    from = "dev.extframework.extensions.example.MyFirstMixin",
+    from = "com.kaolinmc.extensions.example.MyFirstMixin",
     to = "net.minecraft.client.main.Main",
     methodFrom = "Method to be injected(Ljava/lang/String;)V", // Yes, this works!
    // The rest will tell yakclient how to define the method once its injected. In later releases this will be optional.
@@ -271,14 +271,14 @@ yakclient {
         named("1.19.2") {
             dependencies {
                 // FOR KOTLIN
-                //"kapt1.19.2"("dev.extframework:yakclient-preprocessor:1.0-SNAPSHOT")
+                //"kapt1.19.2"("com.kaolinmc:yakclient-preprocessor:1.0-SNAPSHOT")
                 //implementation("org.jetbrains.kotlin:kotlin-stdlib:1.8.10")
 
                 // FOR JAVA
-                //annotationProcessor("dev.extframework:yakclient-preprocessor:1.0-SNAPSHOT")
+                //annotationProcessor("com.kaolinmc:yakclient-preprocessor:1.0-SNAPSHOT")
 
                 minecraft("1.19.2")
-                implementation("dev.extframework:client-api:1.0-SNAPSHOT")
+                implementation("com.kaolinmc:client-api:1.0-SNAPSHOT")
             }
 
             supportedVersions.addAll(listOf("1.19.2"))
@@ -317,7 +317,7 @@ One cool feature we get almost for free is partition overloading. If we dont wan
 dependencies on each other, for example the main needing version dependent info from another partition, we can 
 define declarations that partitions overload. For example, if we define a class in the main partition like:
 ```kotlin
-// dev.extframework.extensions.example.OverloadingExtample.kt @ main
+// com.kaolinmc.extensions.example.OverloadingExtample.kt @ main
 
 // Class declaration ...
 
@@ -329,7 +329,7 @@ fun getMcVersion() : String {
 Then we dont even have to implement this method, if we include a class with the exact same signature in another
 partition (you should implement the overload in all other partitions) like:
 ```kotlin
-// dev.extframework.extensions.example.OverloadingExtample.kt @ 1.19.2
+// com.kaolinmc.extensions.example.OverloadingExtample.kt @ 1.19.2
 
 // Class/method declaration, needs to be the same as before...
 

@@ -1,12 +1,12 @@
-import dev.extframework.gradle.common.*
+import com.kaolinmc.gradle.common.*
 
 plugins {
     kotlin("jvm") version "2.1.20"
 
-    id("dev.extframework.common") version "1.1.1"
+    id("com.kaolinmc.common") version "0.1"
 }
 
-group = "dev.extframework"
+group = "com.kaolinmc"
 version = "2.2.2-SNAPSHOT"
 
 tasks.wrapper {
@@ -100,7 +100,7 @@ common {
     defaultJavaSettings()
     publishing {
         repositories {
-            extFramework(credentials = propertyCredentialProvider)
+            kaolin(credentials = propertyCredentialProvider)
         }
 
         publication {
@@ -111,10 +111,10 @@ common {
             commonPom {
                 packaging = "jar"
 
-                withExtFrameworkRepo()
+                withKaolinRepo()
                 defaultDevelopers()
                 gnuLicense()
-                extFrameworkScm("ext-loader")
+                kaolinScm("ext-loader")
             }
         }
     }
@@ -122,12 +122,11 @@ common {
 
 allprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
-    apply(plugin = "dev.extframework.common")
+    apply(plugin = "com.kaolinmc.common")
 
     repositories {
         mavenCentral()
-        extFramework()
-        mavenLocal()
+        kaolin()
     }
 
     kotlin {

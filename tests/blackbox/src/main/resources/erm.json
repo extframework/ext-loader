@@ -1,6 +1,6 @@
 {
   "apiVersion": 2,
-  "groupId": "dev.extframework.test",
+  "groupId": "com.kaolinmc.test",
   "name": "blackbox",
   "version": "1.0",
   "repositories": [],
@@ -12,7 +12,7 @@
       "repositories": [],
       "dependencies": [],
       "options": {
-        "tweaker-class": "dev.extframework.test.blackbox.BlackboxTweaker"
+        "tweaker-class": "com.kaolinmc.test.blackbox.BlackboxTweaker"
       }
     }
   ]

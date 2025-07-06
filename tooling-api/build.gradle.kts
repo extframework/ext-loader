@@ -1,8 +1,6 @@
-import dev.extframework.gradle.common.archives
-import dev.extframework.gradle.common.extFramework
-import dev.extframework.gradle.common.objectContainer
+import com.kaolinmc.gradle.common.*
 
-group = "dev.extframework"
+group = "com.kaolinmc"
 version = "1.1.2-SNAPSHOT"
 
 dependencies {
@@ -22,7 +20,7 @@ common {
     defaultJavaSettings()
     publishing {
         repositories {
-            extFramework(credentials = propertyCredentialProvider)
+            kaolin(credentials = propertyCredentialProvider)
         }
 
         publication {
@@ -33,10 +31,10 @@ common {
             commonPom {
                 packaging = "jar"
 
-                withExtFrameworkRepo()
+                withKaolinRepo()
                 defaultDevelopers()
                 gnuLicense()
-                extFrameworkScm("ext-loader")
+                kaolinScm("ext-loader")
             }
         }
     }
