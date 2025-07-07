@@ -7,14 +7,10 @@ plugins {
 }
 
 group = "com.kaolinmc"
-version = "2.2.2-SNAPSHOT"
+version = "2.2.3-SNAPSHOT"
 
 tasks.wrapper {
     gradleVersion = "8.3"
-}
-
-dependencyManagement {
-    boot("3.7.2-SNAPSHOT")
 }
 
 dependencies {
