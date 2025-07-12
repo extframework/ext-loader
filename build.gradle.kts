@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.kaolinmc"
-version = "2.2.3-SNAPSHOT"
+version = "2.2.4-SNAPSHOT"
 
 tasks.wrapper {
     gradleVersion = "8.3"

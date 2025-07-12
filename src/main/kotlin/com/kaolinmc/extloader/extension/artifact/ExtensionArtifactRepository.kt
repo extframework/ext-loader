@@ -31,17 +31,17 @@ public open class ExtensionArtifactRepository(
     ): ExtensionArtifactMetadata {
         val (group, artifact, version) = request.descriptor
 
-        val (ermOr, ermLocation) = try {
+        val (ermOr, ermLocation, ermBytes) = try {
             val resource = layout.resourceOf(group, artifact, version, "erm", "json")
+            val ermBytes = resource.open().toByteArray()
 
-            resource to resource.location
+            Triple(resource, resource.location, ermBytes)
         } catch (e: ResourceNotFoundException) {
             throw MetadataRequestException.MetadataNotFound(request.descriptor, "erm.json", e)
         } catch (e: Exception) {
             throw MetadataRequestException("Failed to request resource for erm: '${request.descriptor}'", e)
         }
 
-        val ermBytes = ermOr.open().toByteArray()
         verifyVersion(request.descriptor.name, mapper.readTree(ermBytes))
 
         val erm = try {
@@ -123,10 +123,13 @@ public open class ExtensionArtifactRepository(
                     location,
                     true,
                     false,
-                    hashType
+                    hashType,
+//                    requireResourceVerification = true
                 )
 
-                "local" -> SimpleMavenRepositorySettings.local(location, hashType)
+                "local" -> SimpleMavenRepositorySettings.local(location, hashType,
+//                    requireResourceVerification = true
+                )
                 else -> return null
             }
         }

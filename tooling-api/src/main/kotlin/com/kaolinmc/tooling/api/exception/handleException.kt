@@ -9,7 +9,7 @@ internal open class HierarchicalDistance(
         return incrementBy(1)
     }
 
-    open fun incrementBy(int: Int) : HierarchicalDistance {
+    open fun incrementBy(int: Int): HierarchicalDistance {
         return if (distance == Int.MAX_VALUE) this
         else if (int == Int.MAX_VALUE) NonConvergingHierarchicalDistance()
         else if (int.toLong() + distance.toLong() >= Int.MAX_VALUE.toLong()) return NonConvergingHierarchicalDistance()
@@ -26,13 +26,12 @@ internal class NonConvergingHierarchicalDistance : HierarchicalDistance(Int.MAX_
 internal fun hierarchicalDistance(type: Class<*>, parent: Class<*>): HierarchicalDistance {
     return if (type == parent) HierarchicalDistance(0)
     /* Fast path */ else if (!parent.isAssignableFrom(type)) NonConvergingHierarchicalDistance()
-
     else {
         val interfaceHierarchy = type.interfaces.map { c ->
             hierarchicalDistance(c, parent).increment()
         }
 
-        fun interfaceCount(cls: Class<*>) : Int {
+        fun interfaceCount(cls: Class<*>): Int {
             return cls.interfaces.size + cls.interfaces.map(::interfaceCount).sum()
         }
 
@@ -47,37 +46,51 @@ internal fun hierarchicalDistance(type: Class<*>, parent: Class<*>): Hierarchica
     }
 }
 
+private val anySerializer = AnyContextSerializer()
+
+public val exceptionSerializers: MutableList<ExceptionContextSerializer<out Any>> = buildList {
+    IterableContextSerializer().also(::add)
+    MapContextSerializer().also(::add)
+    StringContextSerializer().also(::add)
+    PathContextSerializer().also(::add)
+    PairSerializer().also(::add)
+    RepositorySerializer().also(::add)
+}.toMutableList()
+
+internal fun serializeInternal(value: Any): String {
+    // Super class distance is calculated as 1 + the max height of interfaces implemented by the current class
+
+    val applicable = exceptionSerializers.filter {
+        it.type.isInstance(value)
+    }.takeIf { it.isNotEmpty() }?.minBy {
+        hierarchicalDistance(value::class.java, it.type).distance
+    } ?: anySerializer
+
+    return (applicable as ExceptionContextSerializer<Any>).serialize(
+        value,
+        object : ExceptionContextSerializer.Helper {
+            override fun serialize(value: Any): String {
+                return serializeInternal(value)
+            }
+
+            override fun padBy(str: String, padding: Int): String {
+                val padding = buildString {
+                    repeat(padding) { append(" ") }
+                }
+
+                return str.split("\n")
+                    .joinToString(separator = "\n") {
+                        padding + it
+                    }
+            }
+        })
+}
+
 internal fun handleException(
 //    serializers: List<ExceptionContextSerializer<*>>,
 //    stackTracePrinter: StackTracePrinter,
     exception: StructuredException
-) : String {
-    val serializers = buildList {
-        AnyContextSerializer().also(::add)
-        IterableContextSerializer().also(::add)
-        MapContextSerializer().also(::add)
-        StringContextSerializer().also(::add)
-        PathContextSerializer().also(::add)
-    }
-    val stackTracePrinter = BasicExceptionPrinter()
-
-    fun serializeInternal(value: Any): String {
-        // Super class distance is calculated as 1 + the max height of interfaces implemented by the current class
-
-        val applicable = serializers.filter {
-            it.type.isInstance(value)
-        }.takeIf { it.isNotEmpty() }?.minBy {
-            hierarchicalDistance(value::class.java, it.type).distance
-        } ?: throw Exception("Cannot find serializer to serialize type: '$value' when handling a Job Exception. (has serializer 'any' not been registered?)")
-
-        return (applicable as ExceptionContextSerializer<Any>).serialize(value,
-            object : ExceptionContextSerializer.Helper {
-                override fun serialize(value: Any): String {
-                    return serializeInternal(value)
-                }
-            })
-    }
-
+): String {
     fun causes(exception: Throwable): List<Throwable> {
         return listOf(exception) + (exception.cause?.let(::causes) ?: listOf())
     }
@@ -90,15 +103,23 @@ internal fun handleException(
 
     output.appendLine("Exception chain: ${causes.joinToString(separator = " <- ") { (it as? StructuredException)?.type?.toString() ?: it::class.java.simpleName }}")
     output.appendLine("A fatal exception has occurred:")
-    output.appendLine(" --> " + (causes
-        .reversed()
-        .filterIsInstance<StructuredException>()
-        .firstNotNullOfOrNull { it.description } ?: "No message provided"))
+    output.appendLine(
+        " --> " + (causes
+            .reversed()
+            .filterIsInstance<StructuredException>()
+            .firstNotNullOfOrNull { it.description } ?: "No message provided"))
 
     if (completeContext.isNotEmpty()) {
         output.appendLine("Context:")
         completeContext.forEach { (k, v) ->
-            output.appendLine(" > \"$k\" -> ${serializeInternal(v)}")
+            val serialized = serializeInternal(v).split("\n")
+
+            val formatted = serialized
+                .takeIf { it.size > 1 }
+                ?.takeLast(serialized.size - 1)
+                ?.joinToString(separator = "\n") { "   $it" } ?: ""
+
+            output.appendLine(" > \"$k\" -> ${serialized[0]}\n${formatted}")
         }
     } else output.appendLine("Context: (none provided)")
 

@@ -7,5 +7,7 @@ public interface ExceptionContextSerializer<T> {
 
     public interface Helper {
         public fun serialize(value: Any) : String
+
+        public fun padBy(str: String, padding: Int) : String
     }
 }
