@@ -46,6 +46,8 @@ fun newLoader(): Pair<ExtensionLoader, ExtensionEnvironment> {
 //        registry
     )
 
+    environment += loader
+
     return Pair(loader, environment)
 }
 

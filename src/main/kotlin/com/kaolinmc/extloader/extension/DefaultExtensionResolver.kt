@@ -15,23 +15,28 @@ import com.kaolinmc.boot.monad.Tree
 import com.kaolinmc.boot.util.mapAsync
 import com.kaolinmc.common.util.make
 import com.kaolinmc.common.util.resolve
+import com.kaolinmc.common.util.toBytes
 import com.kaolinmc.extloader.extension.artifact.ExtensionArtifactRepository.Companion.parseSettings
 import com.kaolinmc.extloader.extension.artifact.ExtensionRepositoryFactory
 import com.kaolinmc.extloader.extension.partition.DefaultPartitionResolver
 import com.kaolinmc.tooling.api.ExtensionLoader
 import com.kaolinmc.tooling.api.TOOLING_API_VERSION
 import com.kaolinmc.tooling.api.environment.ExtensionEnvironment
-import com.kaolinmc.tooling.api.extension.ExtensionClassLoader
-import com.kaolinmc.tooling.api.extension.ExtensionNode
-import com.kaolinmc.tooling.api.extension.ExtensionResolver
-import com.kaolinmc.tooling.api.extension.ExtensionRuntimeModel
+import com.kaolinmc.tooling.api.extension.*
 import com.kaolinmc.tooling.api.extension.artifact.ExtensionArtifactMetadata
 import com.kaolinmc.tooling.api.extension.artifact.ExtensionDescriptor
 import com.kaolinmc.tooling.api.extension.artifact.ExtensionRepositorySettings
 import com.kaolinmc.tooling.api.extension.partition.PartitionResolver
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import kotlin.io.path.writeBytes
 
 public open class DefaultExtensionResolver(
@@ -74,7 +79,7 @@ public open class DefaultExtensionResolver(
         private fun extensionNotPresent(descriptor: ExtensionDescriptor): Nothing {
             throw ExtensionLoadException(
                 descriptor,
-                message = "Failed to load a partition because this extension was not loaded yet."
+                message = "Failed to load a partition because extension '$descriptor' was not loaded yet."
             ) {
                 solution("Loading the extension tree before loading partitions.")
             }
@@ -92,10 +97,16 @@ public open class DefaultExtensionResolver(
             return extensionMetadata[descriptor]?.repository ?: extensionNotPresent(descriptor)
         }
     }
-    override val partitionResolver: PartitionResolver = DefaultPartitionResolver(
-        accessBridge,
-        environment
-    )
+    override val partitionResolver: PartitionResolver by lazy {
+        DefaultPartitionResolver(
+            accessBridge,
+            environment
+        )
+    }
+
+    private companion object {
+        val fileMutex = Mutex()
+    }
 
     override fun register(auditors: Auditors): Auditors {
         return auditors.registerConstraintNegotiator(
@@ -145,20 +156,21 @@ public open class DefaultExtensionResolver(
         metadata: ExtensionArtifactMetadata,
         parents: List<Tree<Either<ExtensionArtifactMetadata, TaggedIArchive>>>,
         helper: CacheHelper<ExtensionDescriptor>
-    ): Tree<TaggedIArchive> {
+    ): Tree<TaggedIArchive> = withContext(Dispatchers.IO) {
         helper.withResource(
             "erm.json",
             metadata.erm,
         )
 
-        extensionMetadata[metadata.descriptor] = ExtensionMetadata(
-            mapper.readValue<ExtensionRuntimeModel>(metadata.erm.open().toByteArray()),
-            writeRepositoryToResource(metadata),
-        )
+        // Init lazy
+        extensionMetadata
 
-        metadataPath.writeBytes(mapper.writeValueAsBytes(extensionMetadata.mapKeys {
-            it.key.name
-        }))
+        tryWriteLock(
+            ExtensionMetadata(
+                mapper.readValue<ExtensionRuntimeModel>(metadata.erm.open().toByteArray()),
+                writeRepositoryToResource(metadata),
+            )
+        )
 
         val parents = parents.mapAsync {
             helper.cache(
@@ -167,7 +179,7 @@ public open class DefaultExtensionResolver(
             )
         }
 
-        return helper.newData(
+        helper.newData(
             metadata.descriptor,
             parents
                 .onEach { it.start() }
@@ -193,5 +205,32 @@ public open class DefaultExtensionResolver(
 
     protected fun ExtensionDescriptor.toIdentifier(): String {
         return "$group:$artifact"
+    }
+
+    private suspend fun tryWriteLock(
+        metadata: ExtensionMetadata
+    ) = withContext(Dispatchers.IO) {
+        fileMutex.withLock {
+            FileChannel.open(metadataPath, StandardOpenOption.WRITE, StandardOpenOption.READ).use { channel ->
+                val buf = ByteBuffer.allocate(channel.size().toInt())
+                channel.read(buf)
+
+                val parsed = mapper.readValue<Map<String, ExtensionMetadata>>(
+                    buf.also { it.rewind() }.toBytes()
+                ).mapKeysTo(HashMap()) { ExtensionDescriptor.parseDescriptor(it.key) }
+
+                parsed[metadata.erm.descriptor] = metadata
+
+                extensionMetadata.clear()
+                extensionMetadata.putAll(parsed)
+
+                val out = mapper.writeValueAsBytes(parsed.mapKeys {
+                    it.key.name
+                })
+
+                channel.position(0)
+                channel.write(ByteBuffer.wrap(out))
+            }
+        }
     }
 }
