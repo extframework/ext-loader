@@ -121,15 +121,10 @@ public open class ExtensionArtifactRepository(
             return when (type) {
                 "default" -> SimpleMavenRepositorySettings.default(
                     location,
-                    true,
-                    false,
                     hashType,
-//                    requireResourceVerification = true
                 )
 
-                "local" -> SimpleMavenRepositorySettings.local(location, hashType,
-//                    requireResourceVerification = true
-                )
+                "local" -> SimpleMavenRepositorySettings.local(location, hashType)
                 else -> return null
             }
         }

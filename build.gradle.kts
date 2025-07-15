@@ -3,15 +3,16 @@ import com.kaolinmc.gradle.common.*
 plugins {
     kotlin("jvm") version "2.1.20"
 
-    id("com.kaolinmc.common") version "0.1"
+    id("com.kaolinmc.common") version "0.1.6"
 }
 
 group = "com.kaolinmc"
-version = "2.2.5-SNAPSHOT"
+version = "2.2.6-SNAPSHOT"
 
 tasks.wrapper {
     gradleVersion = "8.3"
 }
+
 
 dependencies {
     testImplementation(project(":"))
